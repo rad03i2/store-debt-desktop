@@ -1,3 +1,5 @@
+using StoreDebt.Desktop.Services;
+
 namespace StoreDebt.Desktop.Models;
 
 public sealed class Customer
@@ -11,6 +13,6 @@ public sealed class Customer
     public long CreatedAt { get; init; }
     public long UpdatedAt { get; init; }
 
-    public string DebtText => $"{TotalDebt:N0} د.ع";
-    public string ContactText => string.IsNullOrWhiteSpace(Phone) ? "بدون رقم هاتف" : Phone;
+    public string DebtText => MoneyFormatter.Format(TotalDebt);
+    public string ContactText => IraqiPhoneService.Display(Phone);
 }
