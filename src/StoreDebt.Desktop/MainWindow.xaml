@@ -7,6 +7,7 @@
         MinWidth="1180"
         MinHeight="760"
         WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
         FlowDirection="RightToLeft"
         Language="en-US"
         Background="{StaticResource BackgroundBrush}"
@@ -70,7 +71,7 @@
                     <StackPanel>
                         <TextBlock Text="المرحلة الثالثة" Foreground="White"
                                    FontWeight="Bold" FontSize="12"/>
-                        <TextBlock Text="الإصدار 0.3.4" Foreground="#BEDCCE"
+                        <TextBlock Text="الإصدار 0.3.5" Foreground="#BEDCCE"
                                    FontSize="11" Margin="0,3,0,0"/>
                         <TextBlock Text="ويندوز • قاعدة بيانات محلية" Foreground="#9FC8B5"
                                    FontSize="10" Margin="0,3,0,0"/>
@@ -725,7 +726,7 @@
         <Grid Grid.ColumnSpan="2"
               Visibility="{Binding IsDebtOpen, Converter={StaticResource BoolToVisibilityConverter}}"
               Background="#79000000">
-            <Border Width="610" Background="White" CornerRadius="18" Padding="26"
+            <Border Width="760" Background="White" CornerRadius="18" Padding="28"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel>
                     <TextBlock Text="تسجيل دين جديد"
@@ -740,23 +741,23 @@
                              FlowDirection="LeftToRight" TextAlignment="Right"
                              Height="50" FontSize="21" FontWeight="Bold"/>
 
-                    <UniformGrid Columns="8" Margin="0,10,0,0" FlowDirection="LeftToRight">
+                    <UniformGrid Columns="8" Margin="0,12,0,0" FlowDirection="RightToLeft">
                         <Button Content="250" Command="{Binding SetDebtAmountCommand}" CommandParameter="250"
-                                Style="{StaticResource SecondaryButton}" Margin="2"/>
+                                Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
                         <Button Content="500" Command="{Binding SetDebtAmountCommand}" CommandParameter="500"
-                                Style="{StaticResource SecondaryButton}" Margin="2"/>
+                                Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
                         <Button Content="750" Command="{Binding SetDebtAmountCommand}" CommandParameter="750"
-                                Style="{StaticResource SecondaryButton}" Margin="2"/>
+                                Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
                         <Button Content="1,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="1000"
-                                Style="{StaticResource SecondaryButton}" Margin="2"/>
+                                Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
                         <Button Content="2,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="2000"
-                                Style="{StaticResource SecondaryButton}" Margin="2"/>
+                                Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
                         <Button Content="3,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="3000"
-                                Style="{StaticResource SecondaryButton}" Margin="2"/>
+                                Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
                         <Button Content="4,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="4000"
-                                Style="{StaticResource SecondaryButton}" Margin="2"/>
+                                Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
                         <Button Content="5,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="5000"
-                                Style="{StaticResource SecondaryButton}" Margin="2"/>
+                                Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
                     </UniformGrid>
 
                     <TextBlock Text="تفاصيل المشتريات"
