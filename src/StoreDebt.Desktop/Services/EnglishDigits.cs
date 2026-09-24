@@ -19,7 +19,7 @@ public static class EnglishDigits
         value.ToString("N0", CultureInfo.InvariantCulture);
 
     public static string DateTime(DateTime value) =>
-        value.ToString("yyyy/MM/dd - hh:mm tt", CultureInfo.InvariantCulture);
+        value.ToString("yyyy/MM/dd - HH:mm", CultureInfo.InvariantCulture);
 
     public static string Date(DateTime value) =>
         value.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
