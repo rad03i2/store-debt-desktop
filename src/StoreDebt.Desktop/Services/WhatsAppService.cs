@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using StoreDebt.Desktop.Models;
 
@@ -12,7 +13,7 @@ public sealed class WhatsAppService
         _statementService = statementService;
     }
 
-    public string OpenStatementChat(Customer customer, StatementReceipt receipt)
+    public string OpenStatementInDesktopApp(Customer customer, StatementReceipt receipt)
     {
         if (!IraqiPhoneService.TryToWhatsAppDigits(customer.Phone, out var phone))
         {
@@ -20,19 +21,28 @@ public sealed class WhatsAppService
                 "لا يوجد رقم هاتف عراقي صالح لهذا الزبون. أدخل رقماً مثل 07701234567.");
         }
 
-        // Official wa.me links can prefill text, but they do not attach a local image.
-        // Copy the receipt image to the clipboard so the user only needs Ctrl+V in the chat.
+        // WhatsApp's URI scheme can open the installed app and prefill text.
+        // The documented URI does not provide a local-file attachment parameter,
+        // so the receipt image is also copied to the clipboard ready to paste.
         _statementService.CopyImage(receipt.ImagePath);
 
         var encodedText = Uri.EscapeDataString(receipt.Text);
-        var url = $"https://wa.me/{phone}?text={encodedText}";
+        var uri = $"whatsapp://send?phone={phone}&text={encodedText}";
 
-        Process.Start(new ProcessStartInfo
+        try
         {
-            FileName = url,
-            UseShellExecute = true
-        });
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = uri,
+                UseShellExecute = true
+            });
+        }
+        catch (Win32Exception)
+        {
+            throw new InvalidOperationException(
+                "تعذر فتح تطبيق واتساب على ويندوز. تأكد من تثبيت واتساب وتسجيل الدخول إليه.");
+        }
 
-        return "تم فتح محادثة واتساب بالنص الجاهز، وصورة الوصل منسوخة. اضغط Ctrl+V داخل المحادثة لإرفاقها ثم أرسل.";
+        return "تم فتح تطبيق واتساب وتجهيز نص التنبيه وصورة كشف الحساب.";
     }
 }
