@@ -69,7 +69,7 @@
                     <StackPanel>
                         <TextBlock Text="المرحلة الثالثة" Foreground="White"
                                    FontWeight="Bold" FontSize="12"/>
-                        <TextBlock Text="الإصدار 0.3.0" Foreground="#BEDCCE"
+                        <TextBlock Text="الإصدار 0.3.2" Foreground="#BEDCCE"
                                    FontSize="11" Margin="0,3,0,0"/>
                         <TextBlock Text="Windows • SQLite" Foreground="#9FC8B5"
                                    FontSize="10" Margin="0,3,0,0"/>
@@ -957,7 +957,7 @@
                             <TextBlock Text="النص الذي سيظهر جاهزاً في واتساب"
                                        FontWeight="SemiBold"
                                        Margin="0,16,0,6"/>
-                            <TextBox Text="{Binding StatementText}"
+                            <TextBox Text="{Binding StatementText, Mode=OneWay}"
                                      IsReadOnly="True"
                                      Height="190"
                                      AcceptsReturn="True"
