@@ -1,3 +1,4 @@
+using System.IO;
 using Microsoft.Data.Sqlite;
 using StoreDebt.Desktop.Models;
 
@@ -245,7 +246,7 @@ public sealed class StoreDatabase
             await using var reader = await command.ExecuteReaderAsync();
             await reader.ReadAsync();
             totalDebt = reader.GetInt64(0);
-            customerCount = reader.GetInt32(1);
+            customerCount = Convert.ToInt32(reader.GetInt64(1));
         }
 
         var now = DateTimeOffset.Now;
