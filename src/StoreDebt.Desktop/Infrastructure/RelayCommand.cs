@@ -13,10 +13,16 @@ public sealed class RelayCommand : ICommand
         _canExecute = canExecute;
     }
 
-    public event EventHandler? CanExecuteChanged;
+    public event EventHandler? CanExecuteChanged
+    {
+        add => CommandManager.RequerySuggested += value;
+        remove => CommandManager.RequerySuggested -= value;
+    }
+
     public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
     public void Execute(object? parameter) => _execute(parameter);
-    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+
+    public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
 }
 
 public sealed class AsyncRelayCommand : ICommand
@@ -31,12 +37,19 @@ public sealed class AsyncRelayCommand : ICommand
         _canExecute = canExecute;
     }
 
-    public event EventHandler? CanExecuteChanged;
-    public bool CanExecute(object? parameter) => !_isRunning && (_canExecute?.Invoke() ?? true);
+    public event EventHandler? CanExecuteChanged
+    {
+        add => CommandManager.RequerySuggested += value;
+        remove => CommandManager.RequerySuggested -= value;
+    }
+
+    public bool CanExecute(object? parameter) =>
+        !_isRunning && (_canExecute?.Invoke() ?? true);
 
     public async void Execute(object? parameter)
     {
         if (!CanExecute(parameter)) return;
+
         try
         {
             _isRunning = true;
@@ -50,5 +63,5 @@ public sealed class AsyncRelayCommand : ICommand
         }
     }
 
-    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
 }
