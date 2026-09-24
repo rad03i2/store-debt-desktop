@@ -198,6 +198,30 @@ public sealed class StoreDatabase
         return items;
     }
 
+    public async Task<IReadOnlyList<DebtTransaction>> GetStatementTransactionsAsync(long customerId)
+    {
+        var items = new List<DebtTransaction>();
+
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT Id, CustomerId, Type, Amount, BalanceAfter, ItemsSummary, Note, Timestamp
+            FROM Transactions
+            WHERE CustomerId = $customerId
+            ORDER BY Timestamp DESC, Id DESC;
+            """;
+        command.Parameters.AddWithValue("$customerId", customerId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            items.Add(ReadTransaction(reader));
+        }
+
+        return items;
+    }
+
     public async Task<IReadOnlyList<ActivityRecord>> GetAllActivityAsync()
     {
         var items = new List<ActivityRecord>();
