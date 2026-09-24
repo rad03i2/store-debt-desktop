@@ -18,7 +18,7 @@ public sealed class StatementService
         IReadOnlyList<DebtTransaction> transactions)
     {
         var generatedAt = DateTime.Now;
-        var text = BuildShareText(customer, transactions.Count, generatedAt);
+        var text = BuildShareText(customer, transactions, generatedAt);
         var imagePath = RenderReceipt(customer, transactions, generatedAt);
 
         return new StatementReceipt
@@ -70,19 +70,36 @@ public sealed class StatementService
 
     private static string BuildShareText(
         Customer customer,
-        int transactionCount,
+        IReadOnlyList<DebtTransaction> transactions,
         DateTime generatedAt)
     {
-        return string.Join(
-            Environment.NewLine,
+        var lines = new List<string>
+        {
             "كشف حساب - دفتر المحل",
             $"الزبون: {customer.Name}",
             $"رقم الهاتف: {IraqiPhoneService.Display(customer.Phone)}",
             $"التاريخ: {EnglishDigits.DateTime(generatedAt)}",
-            $"عدد الحركات: {EnglishDigits.Number(transactionCount)}",
+            $"عدد الحركات: {EnglishDigits.Number(transactions.Count)}",
             $"الرصيد الحالي: {MoneyFormatter.Format(customer.TotalDebt)}",
             string.Empty,
-            "صورة كشف الحساب جاهزة للإرفاق مع هذه الرسالة.");
+            "أحدث الحركات:"
+        };
+
+        foreach (var tx in transactions.Take(10))
+        {
+            lines.Add(
+                $"{tx.DateTimeText} | {tx.TypeText} | {tx.AmountText} | الرصيد {tx.BalanceText}");
+        }
+
+        if (transactions.Count > 10)
+        {
+            lines.Add($"... وباقي {EnglishDigits.Number(transactions.Count - 10)} حركة موضحة في صورة الكشف.");
+        }
+
+        lines.Add(string.Empty);
+        lines.Add("صورة كشف الحساب جاهزة للإرفاق مع هذه الرسالة.");
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     private static string RenderReceipt(
@@ -90,7 +107,7 @@ public sealed class StatementService
         IReadOnlyList<DebtTransaction> transactions,
         DateTime generatedAt)
     {
-        var visible = transactions.Take(MaxImageTransactions).ToList();
+        var visible = transactions.Take(MaxImageTransactions).Reverse().ToList();
         var rowHeight = 78;
         var baseHeight = 520;
         var footerHeight = transactions.Count > MaxImageTransactions ? 150 : 100;
