@@ -89,17 +89,7 @@ public sealed class StoreDatabase
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            items.Add(new Customer
-            {
-                Id = reader.GetInt64(0),
-                Name = reader.GetString(1),
-                Phone = reader.GetString(2),
-                Address = reader.GetString(3),
-                Notes = reader.GetString(4),
-                TotalDebt = reader.GetInt64(5),
-                CreatedAt = reader.GetInt64(6),
-                UpdatedAt = reader.GetInt64(7)
-            });
+            items.Add(ReadCustomer(reader));
         }
 
         return items;
@@ -127,7 +117,60 @@ public sealed class StoreDatabase
         command.Parameters.AddWithValue("$notes", notes.Trim());
         command.Parameters.AddWithValue("$now", now);
 
-        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+        return Convert.ToInt64(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    public async Task UpdateCustomerAsync(
+        long customerId,
+        string name,
+        string phone,
+        string address,
+        string notes)
+    {
+        var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE Customers
+            SET Name = $name,
+                Phone = $phone,
+                Address = $address,
+                Notes = $notes,
+                UpdatedAt = $updatedAt
+            WHERE Id = $id;
+            """;
+        command.Parameters.AddWithValue("$name", name.Trim());
+        command.Parameters.AddWithValue("$phone", phone.Trim());
+        command.Parameters.AddWithValue("$address", address.Trim());
+        command.Parameters.AddWithValue("$notes", notes.Trim());
+        command.Parameters.AddWithValue("$updatedAt", now);
+        command.Parameters.AddWithValue("$id", customerId);
+
+        if (await command.ExecuteNonQueryAsync() != 1)
+            throw new InvalidOperationException("الزبون غير موجود.");
+    }
+
+    public async Task DeleteCustomerAsync(long customerId)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        using var transaction = connection.BeginTransaction();
+
+        var debt = await GetCurrentDebtAsync(connection, transaction, customerId);
+        if (debt != 0)
+            throw new InvalidOperationException("لا يمكن حذف زبون لديه دين قائم. صفّر الحساب أولاً.");
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "DELETE FROM Customers WHERE Id = $id;";
+        command.Parameters.AddWithValue("$id", customerId);
+
+        if (await command.ExecuteNonQueryAsync() != 1)
+            throw new InvalidOperationException("تعذر حذف الزبون.");
+
+        transaction.Commit();
     }
 
     public async Task<IReadOnlyList<DebtTransaction>> GetTransactionsAsync(long customerId)
@@ -142,23 +185,57 @@ public sealed class StoreDatabase
             FROM Transactions
             WHERE CustomerId = $customerId
             ORDER BY Timestamp DESC, Id DESC
-            LIMIT 250;
+            LIMIT 500;
             """;
         command.Parameters.AddWithValue("$customerId", customerId);
 
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            items.Add(new DebtTransaction
+            items.Add(ReadTransaction(reader));
+        }
+
+        return items;
+    }
+
+    public async Task<IReadOnlyList<ActivityRecord>> GetAllActivityAsync()
+    {
+        var items = new List<ActivityRecord>();
+
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                t.Id,
+                t.CustomerId,
+                c.Name,
+                t.Type,
+                t.Amount,
+                t.BalanceAfter,
+                t.ItemsSummary,
+                t.Note,
+                t.Timestamp
+            FROM Transactions t
+            INNER JOIN Customers c ON c.Id = t.CustomerId
+            ORDER BY t.Timestamp DESC, t.Id DESC
+            LIMIT 2000;
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            items.Add(new ActivityRecord
             {
-                Id = reader.GetInt64(0),
+                TransactionId = reader.GetInt64(0),
                 CustomerId = reader.GetInt64(1),
-                Type = (TransactionType)reader.GetInt32(2),
-                Amount = reader.GetInt64(3),
-                BalanceAfter = reader.GetInt64(4),
-                ItemsSummary = reader.GetString(5),
-                Note = reader.GetString(6),
-                Timestamp = reader.GetInt64(7)
+                CustomerName = reader.GetString(2),
+                Type = (TransactionType)reader.GetInt32(3),
+                Amount = reader.GetInt64(4),
+                BalanceAfter = reader.GetInt64(5),
+                ItemsSummary = reader.GetString(6),
+                Note = reader.GetString(7),
+                Timestamp = reader.GetInt64(8)
             });
         }
 
@@ -206,9 +283,7 @@ public sealed class StoreDatabase
 
         var currentDebt = await GetCurrentDebtAsync(connection, transaction, customerId);
         if (amount > currentDebt)
-        {
             throw new InvalidOperationException("مبلغ التسديد أكبر من الدين الحالي.");
-        }
 
         var newDebt = currentDebt - amount;
         var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
@@ -225,6 +300,65 @@ public sealed class StoreDatabase
             now);
 
         await UpdateCustomerDebtAsync(connection, transaction, customerId, newDebt, now);
+        transaction.Commit();
+    }
+
+    public async Task UpdateTransactionAsync(
+        long transactionId,
+        long amount,
+        string itemsSummary,
+        string note)
+    {
+        if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
+
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        using var transaction = connection.BeginTransaction();
+
+        var customerId = await GetTransactionCustomerIdAsync(connection, transaction, transactionId);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                UPDATE Transactions
+                SET Amount = $amount,
+                    ItemsSummary = $itemsSummary,
+                    Note = $note
+                WHERE Id = $id;
+                """;
+            command.Parameters.AddWithValue("$amount", amount);
+            command.Parameters.AddWithValue("$itemsSummary", itemsSummary.Trim());
+            command.Parameters.AddWithValue("$note", note.Trim());
+            command.Parameters.AddWithValue("$id", transactionId);
+
+            if (await command.ExecuteNonQueryAsync() != 1)
+                throw new InvalidOperationException("الحركة غير موجودة.");
+        }
+
+        await RecalculateCustomerLedgerAsync(connection, transaction, customerId);
+        transaction.Commit();
+    }
+
+    public async Task DeleteTransactionAsync(long transactionId)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        using var transaction = connection.BeginTransaction();
+
+        var customerId = await GetTransactionCustomerIdAsync(connection, transaction, transactionId);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "DELETE FROM Transactions WHERE Id = $id;";
+            command.Parameters.AddWithValue("$id", transactionId);
+
+            if (await command.ExecuteNonQueryAsync() != 1)
+                throw new InvalidOperationException("الحركة غير موجودة.");
+        }
+
+        await RecalculateCustomerLedgerAsync(connection, transaction, customerId);
         transaction.Commit();
     }
 
@@ -251,13 +385,7 @@ public sealed class StoreDatabase
 
         var now = DateTimeOffset.Now;
         var startOfToday = new DateTimeOffset(
-            now.Year,
-            now.Month,
-            now.Day,
-            0,
-            0,
-            0,
-            now.Offset).ToUnixTimeMilliseconds();
+            now.Year, now.Month, now.Day, 0, 0, 0, now.Offset).ToUnixTimeMilliseconds();
 
         long todayCollections;
         await using (var command = connection.CreateCommand())
@@ -276,6 +404,30 @@ public sealed class StoreDatabase
         return new DashboardSummary(totalDebt, customerCount, todayCollections);
     }
 
+    private static Customer ReadCustomer(SqliteDataReader reader) => new()
+    {
+        Id = reader.GetInt64(0),
+        Name = reader.GetString(1),
+        Phone = reader.GetString(2),
+        Address = reader.GetString(3),
+        Notes = reader.GetString(4),
+        TotalDebt = reader.GetInt64(5),
+        CreatedAt = reader.GetInt64(6),
+        UpdatedAt = reader.GetInt64(7)
+    };
+
+    private static DebtTransaction ReadTransaction(SqliteDataReader reader) => new()
+    {
+        Id = reader.GetInt64(0),
+        CustomerId = reader.GetInt64(1),
+        Type = (TransactionType)reader.GetInt32(2),
+        Amount = reader.GetInt64(3),
+        BalanceAfter = reader.GetInt64(4),
+        ItemsSummary = reader.GetString(5),
+        Note = reader.GetString(6),
+        Timestamp = reader.GetInt64(7)
+    };
+
     private static async Task<long> GetCurrentDebtAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -288,9 +440,24 @@ public sealed class StoreDatabase
 
         var value = await command.ExecuteScalarAsync();
         if (value is null)
-        {
             throw new InvalidOperationException("الزبون غير موجود.");
-        }
+
+        return Convert.ToInt64(value);
+    }
+
+    private static async Task<long> GetTransactionCustomerIdAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long transactionId)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT CustomerId FROM Transactions WHERE Id = $id;";
+        command.Parameters.AddWithValue("$id", transactionId);
+
+        var value = await command.ExecuteScalarAsync();
+        if (value is null)
+            throw new InvalidOperationException("الحركة غير موجودة.");
 
         return Convert.ToInt64(value);
     }
@@ -325,6 +492,71 @@ public sealed class StoreDatabase
         await command.ExecuteNonQueryAsync();
     }
 
+    private static async Task RecalculateCustomerLedgerAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long customerId)
+    {
+        var rows = new List<(long Id, TransactionType Type, long Amount)>();
+
+        await using (var select = connection.CreateCommand())
+        {
+            select.Transaction = transaction;
+            select.CommandText = """
+                SELECT Id, Type, Amount
+                FROM Transactions
+                WHERE CustomerId = $customerId
+                ORDER BY Timestamp ASC, Id ASC;
+                """;
+            select.Parameters.AddWithValue("$customerId", customerId);
+
+            await using var reader = await select.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                rows.Add((
+                    reader.GetInt64(0),
+                    (TransactionType)reader.GetInt32(1),
+                    reader.GetInt64(2)));
+            }
+        }
+
+        long runningBalance = 0;
+
+        foreach (var row in rows)
+        {
+            if (row.Type == TransactionType.Debt)
+            {
+                runningBalance = checked(runningBalance + row.Amount);
+            }
+            else
+            {
+                if (row.Amount > runningBalance)
+                    throw new InvalidOperationException(
+                        "هذا التعديل سيجعل تسديداً قديماً أكبر من الدين الموجود في ذلك الوقت.");
+
+                runningBalance -= row.Amount;
+            }
+
+            await using var updateTx = connection.CreateCommand();
+            updateTx.Transaction = transaction;
+            updateTx.CommandText = """
+                UPDATE Transactions
+                SET BalanceAfter = $balance
+                WHERE Id = $id;
+                """;
+            updateTx.Parameters.AddWithValue("$balance", runningBalance);
+            updateTx.Parameters.AddWithValue("$id", row.Id);
+            await updateTx.ExecuteNonQueryAsync();
+        }
+
+        await UpdateCustomerDebtAsync(
+            connection,
+            transaction,
+            customerId,
+            runningBalance,
+            DateTimeOffset.Now.ToUnixTimeMilliseconds());
+    }
+
     private static async Task UpdateCustomerDebtAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -344,8 +576,6 @@ public sealed class StoreDatabase
         command.Parameters.AddWithValue("$id", customerId);
 
         if (await command.ExecuteNonQueryAsync() != 1)
-        {
             throw new InvalidOperationException("تعذر تحديث رصيد الزبون.");
-        }
     }
 }
