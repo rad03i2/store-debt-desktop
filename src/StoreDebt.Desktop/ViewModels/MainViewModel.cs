@@ -7,18 +7,28 @@ using StoreDebt.Desktop.Services;
 
 namespace StoreDebt.Desktop.ViewModels;
 
-public sealed class MainViewModel : ObservableObject
+public sealed class MainViewModel : ObservableObject, IDisposable
 {
     private readonly StoreDatabase _database;
+    private readonly DialogService _dialogs;
+    private readonly DebtSpeechService _speech;
     private readonly List<Customer> _allCustomers = [];
+    private readonly List<ActivityRecord> _allActivity = [];
 
     private Customer? _selectedCustomer;
+    private DebtTransaction? _selectedTransaction;
+
     private string _searchText = string.Empty;
+    private string _activitySearchText = string.Empty;
     private string _statusMessage = "جاهز";
     private bool _isBusy;
-    private bool _isAddCustomerOpen;
+    private bool _isActivityView;
+
+    private bool _isCustomerDialogOpen;
+    private bool _isEditingCustomer;
     private bool _isDebtOpen;
     private bool _isPaymentOpen;
+    private bool _isTransactionEditOpen;
 
     private string _customerNameInput = string.Empty;
     private string _customerPhoneInput = string.Empty;
@@ -32,30 +42,62 @@ public sealed class MainViewModel : ObservableObject
     private string _paymentAmountInput = string.Empty;
     private string _paymentNoteInput = string.Empty;
 
+    private string _editTransactionAmountInput = string.Empty;
+    private string _editTransactionItemsInput = string.Empty;
+    private string _editTransactionNoteInput = string.Empty;
+
     private long _totalDebt;
     private long _todayCollections;
     private int _customerCount;
 
     private readonly RelayCommand _showDebtCommand;
     private readonly RelayCommand _showPaymentCommand;
+    private readonly RelayCommand _showEditCustomerCommand;
+    private readonly RelayCommand _deleteCustomerCommand;
+    private readonly RelayCommand _showEditTransactionCommand;
+    private readonly RelayCommand _deleteTransactionCommand;
 
-    public MainViewModel(StoreDatabase database)
+    public MainViewModel(
+        StoreDatabase database,
+        DialogService dialogs,
+        DebtSpeechService speech)
     {
         _database = database;
+        _dialogs = dialogs;
+        _speech = speech;
 
         ShowAddCustomerCommand = new RelayCommand(_ => OpenAddCustomer());
         SaveCustomerCommand = new AsyncRelayCommand(SaveCustomerAsync);
         CancelDialogCommand = new RelayCommand(_ => CloseDialogs());
+        EscapeCommand = new RelayCommand(_ => HandleEscape());
 
         _showDebtCommand = new RelayCommand(_ => OpenDebt(), _ => SelectedCustomer is not null);
         _showPaymentCommand = new RelayCommand(_ => OpenPayment(), _ => SelectedCustomer is not null);
+        _showEditCustomerCommand = new RelayCommand(_ => OpenEditCustomer(), _ => SelectedCustomer is not null);
+        _deleteCustomerCommand = new RelayCommand(_ => DeleteCustomer(), _ => SelectedCustomer is not null);
+        _showEditTransactionCommand = new RelayCommand(
+            _ => OpenEditTransaction(),
+            _ => SelectedTransaction is not null);
+        _deleteTransactionCommand = new RelayCommand(
+            _ => DeleteTransaction(),
+            _ => SelectedTransaction is not null);
 
         ShowDebtCommand = _showDebtCommand;
         ShowPaymentCommand = _showPaymentCommand;
+        ShowEditCustomerCommand = _showEditCustomerCommand;
+        DeleteCustomerCommand = _deleteCustomerCommand;
+        ShowEditTransactionCommand = _showEditTransactionCommand;
+        DeleteTransactionCommand = _deleteTransactionCommand;
 
         SaveDebtCommand = new AsyncRelayCommand(SaveDebtAsync, () => SelectedCustomer is not null);
         SavePaymentCommand = new AsyncRelayCommand(SavePaymentAsync, () => SelectedCustomer is not null);
+        SaveTransactionEditCommand = new AsyncRelayCommand(
+            SaveTransactionEditAsync,
+            () => SelectedTransaction is not null);
+
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
+        ShowActivityCommand = new AsyncRelayCommand(ShowActivityAsync);
+        ShowDashboardCommand = new RelayCommand(_ => ShowDashboard());
 
         SetDebtAmountCommand = new RelayCommand(SetDebtAmount);
         SetPaymentAmountCommand = new RelayCommand(SetPaymentAmount);
@@ -63,15 +105,24 @@ public sealed class MainViewModel : ObservableObject
 
     public ObservableCollection<Customer> Customers { get; } = [];
     public ObservableCollection<DebtTransaction> Transactions { get; } = [];
+    public ObservableCollection<ActivityRecord> Activity { get; } = [];
 
     public ICommand ShowAddCustomerCommand { get; }
     public ICommand SaveCustomerCommand { get; }
     public ICommand CancelDialogCommand { get; }
+    public ICommand EscapeCommand { get; }
     public ICommand ShowDebtCommand { get; }
     public ICommand ShowPaymentCommand { get; }
+    public ICommand ShowEditCustomerCommand { get; }
+    public ICommand DeleteCustomerCommand { get; }
+    public ICommand ShowEditTransactionCommand { get; }
+    public ICommand DeleteTransactionCommand { get; }
     public ICommand SaveDebtCommand { get; }
     public ICommand SavePaymentCommand { get; }
+    public ICommand SaveTransactionEditCommand { get; }
     public ICommand RefreshCommand { get; }
+    public ICommand ShowActivityCommand { get; }
+    public ICommand ShowDashboardCommand { get; }
     public ICommand SetDebtAmountCommand { get; }
     public ICommand SetPaymentAmountCommand { get; }
 
@@ -82,16 +133,28 @@ public sealed class MainViewModel : ObservableObject
         {
             if (!SetProperty(ref _selectedCustomer, value)) return;
 
-            _showDebtCommand.RaiseCanExecuteChanged();
-            _showPaymentCommand.RaiseCanExecuteChanged();
+            SelectedTransaction = null;
+            RaiseCustomerCommandStates();
 
             OnPropertyChanged(nameof(SelectedCustomerName));
             OnPropertyChanged(nameof(SelectedCustomerPhone));
             OnPropertyChanged(nameof(SelectedCustomerAddress));
+            OnPropertyChanged(nameof(SelectedCustomerNotes));
             OnPropertyChanged(nameof(SelectedCustomerDebtText));
             OnPropertyChanged(nameof(HasSelectedCustomer));
 
             _ = LoadSelectedTransactionsAsync();
+        }
+    }
+
+    public DebtTransaction? SelectedTransaction
+    {
+        get => _selectedTransaction;
+        set
+        {
+            if (!SetProperty(ref _selectedTransaction, value)) return;
+            _showEditTransactionCommand.RaiseCanExecuteChanged();
+            _deleteTransactionCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -101,6 +164,9 @@ public sealed class MainViewModel : ObservableObject
     public string SelectedCustomerAddress => string.IsNullOrWhiteSpace(SelectedCustomer?.Address)
         ? "لا يوجد عنوان مسجل"
         : SelectedCustomer.Address;
+    public string SelectedCustomerNotes => string.IsNullOrWhiteSpace(SelectedCustomer?.Notes)
+        ? "لا توجد ملاحظات"
+        : SelectedCustomer.Notes;
     public string SelectedCustomerDebtText => SelectedCustomer?.DebtText ?? "0 د.ع";
 
     public string SearchText
@@ -109,9 +175,17 @@ public sealed class MainViewModel : ObservableObject
         set
         {
             if (SetProperty(ref _searchText, value))
-            {
                 FilterCustomers();
-            }
+        }
+    }
+
+    public string ActivitySearchText
+    {
+        get => _activitySearchText;
+        set
+        {
+            if (SetProperty(ref _activitySearchText, value))
+                FilterActivity();
         }
     }
 
@@ -127,11 +201,37 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _isBusy, value);
     }
 
-    public bool IsAddCustomerOpen
+    public bool IsActivityView
     {
-        get => _isAddCustomerOpen;
-        private set => SetProperty(ref _isAddCustomerOpen, value);
+        get => _isActivityView;
+        private set
+        {
+            if (!SetProperty(ref _isActivityView, value)) return;
+            OnPropertyChanged(nameof(IsDashboardView));
+        }
     }
+
+    public bool IsDashboardView => !IsActivityView;
+
+    public bool IsCustomerDialogOpen
+    {
+        get => _isCustomerDialogOpen;
+        private set => SetProperty(ref _isCustomerDialogOpen, value);
+    }
+
+    public bool IsEditingCustomer
+    {
+        get => _isEditingCustomer;
+        private set
+        {
+            if (!SetProperty(ref _isEditingCustomer, value)) return;
+            OnPropertyChanged(nameof(CustomerDialogTitle));
+            OnPropertyChanged(nameof(CustomerDialogActionText));
+        }
+    }
+
+    public string CustomerDialogTitle => IsEditingCustomer ? "تعديل بيانات الزبون" : "إضافة زبون جديد";
+    public string CustomerDialogActionText => IsEditingCustomer ? "حفظ التعديلات" : "حفظ الزبون";
 
     public bool IsDebtOpen
     {
@@ -143,6 +243,12 @@ public sealed class MainViewModel : ObservableObject
     {
         get => _isPaymentOpen;
         private set => SetProperty(ref _isPaymentOpen, value);
+    }
+
+    public bool IsTransactionEditOpen
+    {
+        get => _isTransactionEditOpen;
+        private set => SetProperty(ref _isTransactionEditOpen, value);
     }
 
     public string CustomerNameInput
@@ -198,6 +304,26 @@ public sealed class MainViewModel : ObservableObject
         get => _paymentNoteInput;
         set => SetProperty(ref _paymentNoteInput, value);
     }
+
+    public string EditTransactionAmountInput
+    {
+        get => _editTransactionAmountInput;
+        set => SetProperty(ref _editTransactionAmountInput, value);
+    }
+
+    public string EditTransactionItemsInput
+    {
+        get => _editTransactionItemsInput;
+        set => SetProperty(ref _editTransactionItemsInput, value);
+    }
+
+    public string EditTransactionNoteInput
+    {
+        get => _editTransactionNoteInput;
+        set => SetProperty(ref _editTransactionNoteInput, value);
+    }
+
+    public string EditTransactionTypeText => SelectedTransaction?.TypeText ?? "حركة";
 
     public long TotalDebt
     {
@@ -263,10 +389,9 @@ public sealed class MainViewModel : ObservableObject
         _allCustomers.AddRange(customers);
         FilterCustomers();
 
-        if (selectedId is not null)
-        {
-            SelectedCustomer = _allCustomers.FirstOrDefault(c => c.Id == selectedId.Value);
-        }
+        SelectedCustomer = selectedId is null
+            ? SelectedCustomer
+            : _allCustomers.FirstOrDefault(c => c.Id == selectedId.Value);
 
         var summary = await _database.GetDashboardSummaryAsync();
         TotalDebt = summary.TotalDebt;
@@ -274,9 +399,10 @@ public sealed class MainViewModel : ObservableObject
         TodayCollections = summary.TodayCollections;
 
         if (SelectedCustomer is not null)
-        {
             await LoadSelectedTransactionsAsync();
-        }
+
+        if (IsActivityView)
+            await LoadActivityAsync();
     }
 
     private void FilterCustomers()
@@ -299,6 +425,7 @@ public sealed class MainViewModel : ObservableObject
     private async Task LoadSelectedTransactionsAsync()
     {
         Transactions.Clear();
+        SelectedTransaction = null;
         if (SelectedCustomer is null) return;
 
         try
@@ -313,14 +440,69 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private async Task LoadActivityAsync()
+    {
+        var items = await _database.GetAllActivityAsync();
+        _allActivity.Clear();
+        _allActivity.AddRange(items);
+        FilterActivity();
+    }
+
+    private void FilterActivity()
+    {
+        var query = ActivitySearchText.Trim();
+        var filtered = string.IsNullOrWhiteSpace(query)
+            ? _allActivity
+            : _allActivity.Where(a =>
+                a.CustomerName.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+                a.ItemsSummary.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+                a.Note.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+                a.Amount.ToString().Contains(query, StringComparison.Ordinal))
+              .ToList();
+
+        Activity.Clear();
+        foreach (var item in filtered)
+            Activity.Add(item);
+    }
+
+    private async Task ShowActivityAsync()
+    {
+        CloseDialogs();
+        IsActivityView = true;
+        await LoadActivityAsync();
+        StatusMessage = $"عرض آخر {Activity.Count:N0} حركة.";
+    }
+
+    private void ShowDashboard()
+    {
+        CloseDialogs();
+        IsActivityView = false;
+        StatusMessage = "العودة إلى إدارة حسابات الزبائن.";
+    }
+
     private void OpenAddCustomer()
     {
         CloseDialogs();
+        IsEditingCustomer = false;
         CustomerNameInput = string.Empty;
         CustomerPhoneInput = string.Empty;
         CustomerAddressInput = string.Empty;
         CustomerNotesInput = string.Empty;
-        IsAddCustomerOpen = true;
+        IsCustomerDialogOpen = true;
+    }
+
+    private void OpenEditCustomer()
+    {
+        var customer = SelectedCustomer;
+        if (customer is null) return;
+
+        CloseDialogs();
+        IsEditingCustomer = true;
+        CustomerNameInput = customer.Name;
+        CustomerPhoneInput = customer.Phone;
+        CustomerAddressInput = customer.Address;
+        CustomerNotesInput = customer.Notes;
+        IsCustomerDialogOpen = true;
     }
 
     private void OpenDebt()
@@ -342,11 +524,42 @@ public sealed class MainViewModel : ObservableObject
         IsPaymentOpen = true;
     }
 
+    private void OpenEditTransaction()
+    {
+        var tx = SelectedTransaction;
+        if (tx is null) return;
+
+        CloseDialogs();
+        EditTransactionAmountInput = tx.Amount.ToString();
+        EditTransactionItemsInput = tx.ItemsSummary;
+        EditTransactionNoteInput = tx.Note;
+        OnPropertyChanged(nameof(EditTransactionTypeText));
+        IsTransactionEditOpen = true;
+    }
+
     private void CloseDialogs()
     {
-        IsAddCustomerOpen = false;
+        IsCustomerDialogOpen = false;
         IsDebtOpen = false;
         IsPaymentOpen = false;
+        IsTransactionEditOpen = false;
+    }
+
+    private void HandleEscape()
+    {
+        if (IsCustomerDialogOpen || IsDebtOpen || IsPaymentOpen || IsTransactionEditOpen)
+        {
+            CloseDialogs();
+            return;
+        }
+
+        if (IsActivityView)
+        {
+            ShowDashboard();
+            return;
+        }
+
+        SelectedTransaction = null;
     }
 
     private async Task SaveCustomerAsync()
@@ -361,20 +574,76 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             IsBusy = true;
-            var id = await _database.AddCustomerAsync(
-                name,
-                CustomerPhoneInput,
-                CustomerAddressInput,
-                CustomerNotesInput);
 
-            CloseDialogs();
-            await RefreshAsync();
-            SelectedCustomer = _allCustomers.FirstOrDefault(c => c.Id == id);
-            StatusMessage = $"تمت إضافة {name} بنجاح.";
+            if (IsEditingCustomer)
+            {
+                var customer = SelectedCustomer
+                    ?? throw new InvalidOperationException("لم يتم تحديد زبون.");
+
+                await _database.UpdateCustomerAsync(
+                    customer.Id,
+                    name,
+                    CustomerPhoneInput,
+                    CustomerAddressInput,
+                    CustomerNotesInput);
+
+                CloseDialogs();
+                await RefreshAsync();
+                StatusMessage = $"تم تحديث بيانات {name}.";
+            }
+            else
+            {
+                var id = await _database.AddCustomerAsync(
+                    name,
+                    CustomerPhoneInput,
+                    CustomerAddressInput,
+                    CustomerNotesInput);
+
+                CloseDialogs();
+                await RefreshAsync();
+                SelectedCustomer = _allCustomers.FirstOrDefault(c => c.Id == id);
+                StatusMessage = $"تمت إضافة {name} بنجاح.";
+            }
         }
         catch (Exception ex)
         {
-            StatusMessage = $"تعذرت إضافة الزبون: {ex.Message}";
+            StatusMessage = $"تعذر حفظ بيانات الزبون: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async void DeleteCustomer()
+    {
+        var customer = SelectedCustomer;
+        if (customer is null) return;
+
+        if (customer.TotalDebt != 0)
+        {
+            _dialogs.Info(
+                $"لا يمكن حذف {customer.Name} لأن عليه ديناً قدره {MoneyFormatter.Format(customer.TotalDebt)}.\nصفّر الحساب أولاً.",
+                "حماية حساب الزبون");
+            return;
+        }
+
+        if (!_dialogs.Confirm(
+                $"سيتم حذف الزبون «{customer.Name}» وجميع حركاته القديمة نهائياً.\n\nهل تريد المتابعة؟",
+                "حذف الزبون"))
+            return;
+
+        try
+        {
+            IsBusy = true;
+            await _database.DeleteCustomerAsync(customer.Id);
+            SelectedCustomer = null;
+            await RefreshAsync();
+            StatusMessage = $"تم حذف {customer.Name}.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"تعذر حذف الزبون: {ex.Message}";
         }
         finally
         {
@@ -400,6 +669,8 @@ public sealed class MainViewModel : ObservableObject
             CloseDialogs();
             await RefreshAsync();
             StatusMessage = $"تم تسجيل دين {MoneyFormatter.Format(amount)} على {customer.Name}.";
+
+            _ = _speech.SpeakDebtAsync(amount);
         }
         catch (Exception ex)
         {
@@ -446,6 +717,76 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private async Task SaveTransactionEditAsync()
+    {
+        var tx = SelectedTransaction;
+        if (tx is null) return;
+
+        if (!MoneyFormatter.TryParse(EditTransactionAmountInput, out var amount))
+        {
+            StatusMessage = "أدخل مبلغاً صحيحاً أكبر من صفر.";
+            return;
+        }
+
+        if (!_dialogs.Confirm(
+                $"سيتم تعديل حركة «{tx.TypeText}» القديمة وإعادة حساب رصيد الزبون وكل الأرصدة اللاحقة.\n\nهل تريد حفظ التعديل؟",
+                "تعديل حركة حساب"))
+            return;
+
+        try
+        {
+            IsBusy = true;
+            await _database.UpdateTransactionAsync(
+                tx.Id,
+                amount,
+                EditTransactionItemsInput,
+                EditTransactionNoteInput);
+
+            CloseDialogs();
+            await RefreshAsync();
+            StatusMessage = "تم تعديل الحركة وإعادة حساب الرصيد بنجاح.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"لم يتم تعديل الحركة: {ex.Message}";
+            _dialogs.Info(ex.Message, "تعذر تعديل الحركة");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async void DeleteTransaction()
+    {
+        var tx = SelectedTransaction;
+        var customer = SelectedCustomer;
+        if (tx is null || customer is null) return;
+
+        if (!_dialogs.Confirm(
+                $"حذف حركة «{tx.TypeText}» بقيمة {MoneyFormatter.Format(tx.Amount)} من حساب {customer.Name}؟\n\nسيُعاد حساب الرصيد تلقائياً بعد الحذف.",
+                "حذف حركة حساب"))
+            return;
+
+        try
+        {
+            IsBusy = true;
+            await _database.DeleteTransactionAsync(tx.Id);
+            SelectedTransaction = null;
+            await RefreshAsync();
+            StatusMessage = "تم حذف الحركة وإعادة حساب الحساب.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"لم يتم حذف الحركة: {ex.Message}";
+            _dialogs.Info(ex.Message, "تعذر حذف الحركة");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private void SetDebtAmount(object? parameter)
     {
         if (parameter is null) return;
@@ -456,5 +797,18 @@ public sealed class MainViewModel : ObservableObject
     {
         if (parameter is null) return;
         PaymentAmountInput = parameter.ToString() ?? string.Empty;
+    }
+
+    private void RaiseCustomerCommandStates()
+    {
+        _showDebtCommand.RaiseCanExecuteChanged();
+        _showPaymentCommand.RaiseCanExecuteChanged();
+        _showEditCustomerCommand.RaiseCanExecuteChanged();
+        _deleteCustomerCommand.RaiseCanExecuteChanged();
+    }
+
+    public void Dispose()
+    {
+        _speech.Dispose();
     }
 }
