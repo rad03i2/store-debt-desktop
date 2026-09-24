@@ -4,6 +4,8 @@ namespace StoreDebt.Desktop.Services;
 
 public static class EnglishDigits
 {
+    private static readonly char[] ArabicDigits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+
     public static string Normalize(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
@@ -15,12 +17,24 @@ public static class EnglishDigits
             .Replace('۵', '5').Replace('۶', '6').Replace('۷', '7').Replace('۸', '8').Replace('۹', '9');
     }
 
-    public static string Number(long value) =>
-        value.ToString("N0", CultureInfo.InvariantCulture);
+    public static string Number(long value) => ToArabicDigits(value.ToString("N0", CultureInfo.InvariantCulture));
 
     public static string DateTime(DateTime value) =>
-        value.ToString("yyyy/MM/dd - HH:mm", CultureInfo.InvariantCulture);
+        ToArabicDigits(value.ToString("yyyy/MM/dd - h:mm tt", CultureInfo.InvariantCulture)
+            .Replace("AM", "ص")
+            .Replace("PM", "م"));
 
     public static string Date(DateTime value) =>
-        value.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
+        ToArabicDigits(value.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture));
+
+    public static string ToArabicDigits(string value)
+    {
+        var chars = value.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (chars[i] >= '0' && chars[i] <= '9')
+                chars[i] = ArabicDigits[chars[i] - '0'];
+        }
+        return new string(chars);
+    }
 }
