@@ -9,26 +9,41 @@ public sealed class DebtSpeechService : IDisposable
     private bool _initializationAttempted;
     private bool _disposed;
 
-    public async Task SpeakDebtAsync(long amount)
+    public void Prepare()
     {
-        await Task.Delay(500);
+        try
+        {
+            _ = EnsureSynthesizer();
+        }
+        catch
+        {
+            // Speech is optional and must never block the app.
+        }
+    }
 
+    public Task SpeakDebtAsync(long amount)
+    {
         try
         {
             var synthesizer = EnsureSynthesizer();
-            if (synthesizer is null) return;
+            if (synthesizer is null)
+                return Task.CompletedTask;
 
             lock (_sync)
             {
-                if (_disposed) return;
+                if (_disposed)
+                    return Task.CompletedTask;
+
                 synthesizer.SpeakAsyncCancelAll();
                 synthesizer.SpeakAsync($"تم تسجيل دين بمبلغ {amount} دينار عراقي");
             }
         }
         catch
         {
-            // Speech must never prevent the store app from working.
+            // The debt is already saved; speech failure must not affect it.
         }
+
+        return Task.CompletedTask;
     }
 
     private SpeechSynthesizer? EnsureSynthesizer()
