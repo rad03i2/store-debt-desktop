@@ -11,7 +11,7 @@ public sealed class StatementService
 {
     private const int ReceiptWidth = 1200;
     private const int MaxImageTransactions = 200;
-    private static readonly CultureInfo ArabicCulture = CultureInfo.GetCultureInfo("ar-IQ");
+    private static readonly CultureInfo DrawingCulture = CultureInfo.GetCultureInfo("en-US");
 
     public StatementReceipt Create(
         Customer customer,
@@ -246,7 +246,7 @@ public sealed class StatementService
     {
         var formatted = new FormattedText(
             EnglishDigits.Normalize(text),
-            ArabicCulture,
+            DrawingCulture,
             FlowDirection.RightToLeft,
             new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, weight, FontStretches.Normal),
             fontSize,
