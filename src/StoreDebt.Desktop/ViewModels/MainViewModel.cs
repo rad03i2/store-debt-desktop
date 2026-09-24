@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows.Input;
 using StoreDebt.Desktop.Data;
 using StoreDebt.Desktop.Infrastructure;
@@ -9,14 +10,20 @@ namespace StoreDebt.Desktop.ViewModels;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
+    private static readonly CultureInfo ArabicCulture = CultureInfo.GetCultureInfo("ar-IQ");
+
     private readonly StoreDatabase _database;
     private readonly DialogService _dialogs;
     private readonly DebtSpeechService _speech;
+    private readonly StatementService _statementService;
+    private readonly WhatsAppService _whatsAppService;
+
     private readonly List<Customer> _allCustomers = [];
     private readonly List<ActivityRecord> _allActivity = [];
 
     private Customer? _selectedCustomer;
     private DebtTransaction? _selectedTransaction;
+    private StatementReceipt? _currentStatement;
 
     private string _searchText = string.Empty;
     private string _activitySearchText = string.Empty;
@@ -29,6 +36,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isDebtOpen;
     private bool _isPaymentOpen;
     private bool _isTransactionEditOpen;
+    private bool _isStatementOpen;
 
     private string _customerNameInput = string.Empty;
     private string _customerPhoneInput = string.Empty;
@@ -46,6 +54,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _editTransactionItemsInput = string.Empty;
     private string _editTransactionNoteInput = string.Empty;
 
+    private string _statementText = string.Empty;
+    private string _statementImagePath = string.Empty;
+    private string _statementGeneratedAtText = string.Empty;
+    private string _statementTransactionCountText = "0";
+
     private long _totalDebt;
     private long _todayCollections;
     private int _customerCount;
@@ -56,15 +69,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly RelayCommand _deleteCustomerCommand;
     private readonly RelayCommand _showEditTransactionCommand;
     private readonly RelayCommand _deleteTransactionCommand;
+    private readonly AsyncRelayCommand _showStatementCommand;
+    private readonly RelayCommand _sendStatementWhatsAppCommand;
 
     public MainViewModel(
         StoreDatabase database,
         DialogService dialogs,
-        DebtSpeechService speech)
+        DebtSpeechService speech,
+        StatementService statementService,
+        WhatsAppService whatsAppService)
     {
         _database = database;
         _dialogs = dialogs;
         _speech = speech;
+        _statementService = statementService;
+        _whatsAppService = whatsAppService;
 
         ShowAddCustomerCommand = new RelayCommand(_ => OpenAddCustomer());
         SaveCustomerCommand = new AsyncRelayCommand(SaveCustomerAsync);
@@ -81,6 +100,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _deleteTransactionCommand = new RelayCommand(
             _ => DeleteTransaction(),
             _ => SelectedTransaction is not null);
+        _showStatementCommand = new AsyncRelayCommand(
+            ShowStatementAsync,
+            () => SelectedCustomer is not null);
+        _sendStatementWhatsAppCommand = new RelayCommand(
+            _ => SendStatementWhatsApp(),
+            _ => CanSendStatementWhatsApp);
 
         ShowDebtCommand = _showDebtCommand;
         ShowPaymentCommand = _showPaymentCommand;
@@ -88,12 +113,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         DeleteCustomerCommand = _deleteCustomerCommand;
         ShowEditTransactionCommand = _showEditTransactionCommand;
         DeleteTransactionCommand = _deleteTransactionCommand;
+        ShowStatementCommand = _showStatementCommand;
+        SendStatementWhatsAppCommand = _sendStatementWhatsAppCommand;
 
         SaveDebtCommand = new AsyncRelayCommand(SaveDebtAsync, () => SelectedCustomer is not null);
         SavePaymentCommand = new AsyncRelayCommand(SavePaymentAsync, () => SelectedCustomer is not null);
         SaveTransactionEditCommand = new AsyncRelayCommand(
             SaveTransactionEditAsync,
             () => SelectedTransaction is not null);
+
+        CopyStatementTextCommand = new RelayCommand(_ => CopyStatementText());
+        OpenStatementImageCommand = new RelayCommand(_ => OpenStatementImage());
+        OpenStatementFolderCommand = new RelayCommand(_ => OpenStatementFolder());
 
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         ShowActivityCommand = new AsyncRelayCommand(ShowActivityAsync);
@@ -125,6 +156,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ICommand ShowDashboardCommand { get; }
     public ICommand SetDebtAmountCommand { get; }
     public ICommand SetPaymentAmountCommand { get; }
+    public ICommand ShowStatementCommand { get; }
+    public ICommand CopyStatementTextCommand { get; }
+    public ICommand OpenStatementImageCommand { get; }
+    public ICommand OpenStatementFolderCommand { get; }
+    public ICommand SendStatementWhatsAppCommand { get; }
 
     public Customer? SelectedCustomer
     {
@@ -142,6 +178,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(SelectedCustomerNotes));
             OnPropertyChanged(nameof(SelectedCustomerDebtText));
             OnPropertyChanged(nameof(HasSelectedCustomer));
+            OnPropertyChanged(nameof(CanSendStatementWhatsApp));
 
             _ = LoadSelectedTransactionsAsync();
         }
@@ -169,12 +206,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         : SelectedCustomer.Notes;
     public string SelectedCustomerDebtText => SelectedCustomer?.DebtText ?? "0 د.ع";
 
+    public bool CanSendStatementWhatsApp =>
+        SelectedCustomer is not null &&
+        _currentStatement is not null &&
+        IraqiPhoneService.TryToWhatsAppDigits(SelectedCustomer.Phone, out _);
+
     public string SearchText
     {
         get => _searchText;
         set
         {
-            if (SetProperty(ref _searchText, value))
+            if (SetProperty(ref _searchText, EnglishDigits.Normalize(value)))
                 FilterCustomers();
         }
     }
@@ -184,7 +226,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _activitySearchText;
         set
         {
-            if (SetProperty(ref _activitySearchText, value))
+            if (SetProperty(ref _activitySearchText, EnglishDigits.Normalize(value)))
                 FilterActivity();
         }
     }
@@ -251,6 +293,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _isTransactionEditOpen, value);
     }
 
+    public bool IsStatementOpen
+    {
+        get => _isStatementOpen;
+        private set => SetProperty(ref _isStatementOpen, value);
+    }
+
     public string CustomerNameInput
     {
         get => _customerNameInput;
@@ -260,7 +308,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string CustomerPhoneInput
     {
         get => _customerPhoneInput;
-        set => SetProperty(ref _customerPhoneInput, value);
+        set => SetProperty(ref _customerPhoneInput, EnglishDigits.Normalize(value));
     }
 
     public string CustomerAddressInput
@@ -278,7 +326,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string DebtAmountInput
     {
         get => _debtAmountInput;
-        set => SetProperty(ref _debtAmountInput, value);
+        set => SetProperty(ref _debtAmountInput, EnglishDigits.Normalize(value));
     }
 
     public string DebtItemsInput
@@ -296,7 +344,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string PaymentAmountInput
     {
         get => _paymentAmountInput;
-        set => SetProperty(ref _paymentAmountInput, value);
+        set => SetProperty(ref _paymentAmountInput, EnglishDigits.Normalize(value));
     }
 
     public string PaymentNoteInput
@@ -308,7 +356,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string EditTransactionAmountInput
     {
         get => _editTransactionAmountInput;
-        set => SetProperty(ref _editTransactionAmountInput, value);
+        set => SetProperty(ref _editTransactionAmountInput, EnglishDigits.Normalize(value));
     }
 
     public string EditTransactionItemsInput
@@ -324,6 +372,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public string EditTransactionTypeText => SelectedTransaction?.TypeText ?? "حركة";
+
+    public string StatementText
+    {
+        get => _statementText;
+        private set => SetProperty(ref _statementText, value);
+    }
+
+    public string StatementImagePath
+    {
+        get => _statementImagePath;
+        private set => SetProperty(ref _statementImagePath, value);
+    }
+
+    public string StatementGeneratedAtText
+    {
+        get => _statementGeneratedAtText;
+        private set => SetProperty(ref _statementGeneratedAtText, value);
+    }
+
+    public string StatementTransactionCountText
+    {
+        get => _statementTransactionCountText;
+        private set => SetProperty(ref _statementTransactionCountText, value);
+    }
 
     public long TotalDebt
     {
@@ -357,8 +429,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string TotalDebtText => MoneyFormatter.Format(TotalDebt);
     public string TodayCollectionsText => MoneyFormatter.Format(TodayCollections);
-    public string CustomerCountText => CustomerCount.ToString("N0");
-    public string TodayText => DateTime.Now.ToString("dddd، yyyy/MM/dd");
+    public string CustomerCountText => EnglishDigits.Number(CustomerCount);
+    public string TodayText => EnglishDigits.Normalize(
+        DateTime.Now.ToString("dddd، yyyy/MM/dd", ArabicCulture));
 
     public async Task InitializeAsync()
     {
@@ -414,6 +487,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             : _allCustomers.Where(c =>
                 c.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
                 c.Phone.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                IraqiPhoneService.Display(c.Phone).Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 c.Address.Contains(query, StringComparison.CurrentCultureIgnoreCase))
               .ToList();
 
@@ -457,7 +531,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 a.CustomerName.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
                 a.ItemsSummary.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
                 a.Note.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
-                a.Amount.ToString().Contains(query, StringComparison.Ordinal))
+                EnglishDigits.Number(a.Amount).Contains(query, StringComparison.Ordinal))
               .ToList();
 
         Activity.Clear();
@@ -470,7 +544,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         CloseDialogs();
         IsActivityView = true;
         await LoadActivityAsync();
-        StatusMessage = $"عرض آخر {Activity.Count:N0} حركة.";
+        StatusMessage = $"عرض آخر {EnglishDigits.Number(Activity.Count)} حركة.";
     }
 
     private void ShowDashboard()
@@ -499,7 +573,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         CloseDialogs();
         IsEditingCustomer = true;
         CustomerNameInput = customer.Name;
-        CustomerPhoneInput = customer.Phone;
+        CustomerPhoneInput = IraqiPhoneService.Display(customer.Phone) == "بدون رقم هاتف"
+            ? string.Empty
+            : IraqiPhoneService.Display(customer.Phone);
         CustomerAddressInput = customer.Address;
         CustomerNotesInput = customer.Notes;
         IsCustomerDialogOpen = true;
@@ -530,11 +606,110 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (tx is null) return;
 
         CloseDialogs();
-        EditTransactionAmountInput = tx.Amount.ToString();
+        EditTransactionAmountInput = tx.Amount.ToString(CultureInfo.InvariantCulture);
         EditTransactionItemsInput = tx.ItemsSummary;
         EditTransactionNoteInput = tx.Note;
         OnPropertyChanged(nameof(EditTransactionTypeText));
         IsTransactionEditOpen = true;
+    }
+
+    private async Task ShowStatementAsync()
+    {
+        var customer = SelectedCustomer;
+        if (customer is null) return;
+
+        try
+        {
+            IsBusy = true;
+            CloseDialogs();
+
+            var transactions = await _database.GetTransactionsAsync(customer.Id);
+            _currentStatement = _statementService.Create(customer, transactions);
+
+            StatementText = _currentStatement.Text;
+            StatementImagePath = _currentStatement.ImagePath;
+            StatementGeneratedAtText = _currentStatement.GeneratedAtText;
+            StatementTransactionCountText = EnglishDigits.Number(_currentStatement.TransactionCount);
+
+            IsStatementOpen = true;
+            OnPropertyChanged(nameof(CanSendStatementWhatsApp));
+            _sendStatementWhatsAppCommand.RaiseCanExecuteChanged();
+
+            StatusMessage = "تم إنشاء كشف الحساب كصورة ونص.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"تعذر إنشاء كشف الحساب: {ex.Message}";
+            _dialogs.Info(ex.Message, "تعذر إنشاء كشف الحساب");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private void CopyStatementText()
+    {
+        if (_currentStatement is null) return;
+
+        try
+        {
+            _statementService.CopyText(_currentStatement.Text);
+            StatusMessage = "تم نسخ نص كشف الحساب.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"تعذر نسخ النص: {ex.Message}";
+        }
+    }
+
+    private void OpenStatementImage()
+    {
+        if (_currentStatement is null) return;
+
+        try
+        {
+            _statementService.OpenImage(_currentStatement.ImagePath);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"تعذر فتح صورة الكشف: {ex.Message}";
+        }
+    }
+
+    private void OpenStatementFolder()
+    {
+        if (_currentStatement is null) return;
+
+        try
+        {
+            _statementService.OpenFolder(_currentStatement.ImagePath);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"تعذر فتح مجلد الكشوفات: {ex.Message}";
+        }
+    }
+
+    private void SendStatementWhatsApp()
+    {
+        var customer = SelectedCustomer;
+        var receipt = _currentStatement;
+        if (customer is null || receipt is null) return;
+
+        try
+        {
+            var message = _whatsAppService.OpenStatementChat(customer, receipt);
+            StatusMessage = message;
+            _dialogs.Info(
+                "فتحت محادثة الزبون في واتساب بالنص الجاهز.\n\nصورة كشف الحساب منسوخة أيضاً؛ داخل واتساب اضغط Ctrl+V ثم أرسل.",
+                "كشف الحساب جاهز للإرسال");
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"تعذر فتح واتساب: {ex.Message}";
+            _dialogs.Info(ex.Message, "تعذر إرسال كشف الحساب");
+        }
     }
 
     private void CloseDialogs()
@@ -543,11 +718,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IsDebtOpen = false;
         IsPaymentOpen = false;
         IsTransactionEditOpen = false;
+        IsStatementOpen = false;
     }
 
     private void HandleEscape()
     {
-        if (IsCustomerDialogOpen || IsDebtOpen || IsPaymentOpen || IsTransactionEditOpen)
+        if (IsCustomerDialogOpen ||
+            IsDebtOpen ||
+            IsPaymentOpen ||
+            IsTransactionEditOpen ||
+            IsStatementOpen)
         {
             CloseDialogs();
             return;
@@ -571,6 +751,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (!IraqiPhoneService.TryNormalizeForStorage(CustomerPhoneInput, out var normalizedPhone))
+        {
+            const string message =
+                "رقم الهاتف يجب أن يكون عراقياً. مثال: 07701234567. يمكن أيضاً إدخال +964 أو 00964 وسيحوّله البرنامج تلقائياً.";
+            StatusMessage = message;
+            _dialogs.Info(message, "رقم هاتف غير صالح");
+            return;
+        }
+
         try
         {
             IsBusy = true;
@@ -583,7 +772,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 await _database.UpdateCustomerAsync(
                     customer.Id,
                     name,
-                    CustomerPhoneInput,
+                    normalizedPhone,
                     CustomerAddressInput,
                     CustomerNotesInput);
 
@@ -595,7 +784,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 var id = await _database.AddCustomerAsync(
                     name,
-                    CustomerPhoneInput,
+                    normalizedPhone,
                     CustomerAddressInput,
                     CustomerNotesInput);
 
@@ -790,13 +979,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void SetDebtAmount(object? parameter)
     {
         if (parameter is null) return;
-        DebtAmountInput = parameter.ToString() ?? string.Empty;
+        DebtAmountInput = EnglishDigits.Normalize(parameter.ToString());
     }
 
     private void SetPaymentAmount(object? parameter)
     {
         if (parameter is null) return;
-        PaymentAmountInput = parameter.ToString() ?? string.Empty;
+        PaymentAmountInput = EnglishDigits.Normalize(parameter.ToString());
     }
 
     private void RaiseCustomerCommandStates()
@@ -805,6 +994,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _showPaymentCommand.RaiseCanExecuteChanged();
         _showEditCustomerCommand.RaiseCanExecuteChanged();
         _deleteCustomerCommand.RaiseCanExecuteChanged();
+        _showStatementCommand.RaiseCanExecuteChanged();
+        _sendStatementWhatsAppCommand.RaiseCanExecuteChanged();
     }
 
     public void Dispose()
