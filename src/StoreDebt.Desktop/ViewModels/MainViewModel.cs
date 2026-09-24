@@ -623,7 +623,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             IsBusy = true;
             CloseDialogs();
 
-            var transactions = await _database.GetTransactionsAsync(customer.Id);
+            var transactions = await _database.GetStatementTransactionsAsync(customer.Id);
             _currentStatement = _statementService.Create(customer, transactions);
 
             StatementText = _currentStatement.Text;
