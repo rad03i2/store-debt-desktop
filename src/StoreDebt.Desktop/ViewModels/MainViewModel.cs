@@ -849,11 +849,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             IsBusy = true;
             await _database.RecordDebtAsync(customer.Id, amount, DebtItemsInput, DebtNoteInput);
+
+            // Start speech immediately after the debt is safely committed,
+            // before closing the dialog or refreshing any UI data.
+            _ = _speech.SpeakDebtAsync(amount);
+
             CloseDialogs();
             await RefreshAsync();
             StatusMessage = $"تم تسجيل دين {MoneyFormatter.Format(amount)} على {customer.Name}.";
-
-            _ = _speech.SpeakDebtAsync(amount);
         }
         catch (Exception ex)
         {
