@@ -780,7 +780,9 @@
                         <Button Content="تأكيد تسجيل الدين"
                                 IsDefault="True"
                                 Command="{Binding SaveDebtCommand}"
-                                Style="{StaticResource DangerButton}"/>
+                                Style="{StaticResource DangerPrimaryButton}"
+                                FontSize="15"
+                                Padding="20,12"/>
                         <Button Grid.Column="2"
                                 Content="إلغاء"
                                 Command="{Binding CancelDialogCommand}"
