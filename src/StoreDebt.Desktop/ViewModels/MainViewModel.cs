@@ -699,11 +699,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            var message = _whatsAppService.OpenStatementChat(customer, receipt);
-            StatusMessage = message;
-            _dialogs.Info(
-                "فتحت محادثة الزبون في واتساب بالنص الجاهز.\n\nصورة كشف الحساب منسوخة أيضاً؛ داخل واتساب اضغط Ctrl+V ثم أرسل.",
-                "كشف الحساب جاهز للإرسال");
+            StatusMessage = _whatsAppService.OpenStatementInDesktopApp(customer, receipt);
         }
         catch (Exception ex)
         {
