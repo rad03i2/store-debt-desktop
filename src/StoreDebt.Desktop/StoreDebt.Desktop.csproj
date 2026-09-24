@@ -10,7 +10,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>StoreDebt.Desktop</AssemblyName>
     <RootNamespace>StoreDebt.Desktop</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>Radwan Abd alhady Ahmed</Authors>
     <Product>دفتر ديون المحل</Product>
   </PropertyGroup>
