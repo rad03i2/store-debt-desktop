@@ -973,7 +973,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void SetDebtAmount(object? parameter)
     {
         if (parameter is null) return;
-        DebtAmountInput = EnglishDigits.Normalize(parameter.ToString());
+
+        if (!MoneyFormatter.TryParse(parameter.ToString(), out var increment))
+            return;
+
+        long current = 0;
+        if (!string.IsNullOrWhiteSpace(DebtAmountInput) &&
+            !MoneyFormatter.TryParse(DebtAmountInput, out current))
+        {
+            current = 0;
+        }
+
+        try
+        {
+            var total = checked(current + increment);
+            DebtAmountInput = total.ToString(CultureInfo.InvariantCulture);
+        }
+        catch (OverflowException)
+        {
+            StatusMessage = "المبلغ أكبر من الحد المسموح.";
+        }
     }
 
     private void SetPaymentAmount(object? parameter)
@@ -990,6 +1009,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _deleteCustomerCommand.RaiseCanExecuteChanged();
         _showStatementCommand.RaiseCanExecuteChanged();
         _sendStatementWhatsAppCommand.RaiseCanExecuteChanged();
+    }
+
+    public void PrepareSpeech()
+    {
+        _speech.Prepare();
     }
 
     public void Dispose()
