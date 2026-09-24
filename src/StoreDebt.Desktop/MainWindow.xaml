@@ -67,9 +67,9 @@
                 <Border Grid.Row="4" Background="#18FFFFFF"
                         CornerRadius="12" Padding="12">
                     <StackPanel>
-                        <TextBlock Text="المرحلة الثانية" Foreground="White"
+                        <TextBlock Text="المرحلة الثالثة" Foreground="White"
                                    FontWeight="Bold" FontSize="12"/>
-                        <TextBlock Text="الإصدار 0.2.0" Foreground="#BEDCCE"
+                        <TextBlock Text="الإصدار 0.3.0" Foreground="#BEDCCE"
                                    FontSize="11" Margin="0,3,0,0"/>
                         <TextBlock Text="Windows • SQLite" Foreground="#9FC8B5"
                                    FontSize="10" Margin="0,3,0,0"/>
@@ -379,7 +379,9 @@
                             <Grid Grid.Row="2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Button Grid.Column="0"
@@ -392,6 +394,12 @@
                                         Content="تسجيل تسديد   F3"
                                         Command="{Binding ShowPaymentCommand}"
                                         Style="{StaticResource PrimaryButton}"
+                                        FontSize="15"
+                                        Padding="20,13"/>
+                                <Button Grid.Column="4"
+                                        Content="كشف حساب"
+                                        Command="{Binding ShowStatementCommand}"
+                                        Style="{StaticResource SecondaryButton}"
                                         FontSize="15"
                                         Padding="20,13"/>
                             </Grid>
@@ -549,7 +557,7 @@
                         <TextBlock Text="{Binding StatusMessage}"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    FontSize="11"/>
-                        <TextBlock Text="F2 دين • F3 تسديد • Ctrl+N زبون • Ctrl+H السجل • Esc رجوع"
+                        <TextBlock Text="F2 دين • F3 تسديد • كشف حساب • Ctrl+N زبون • Ctrl+H السجل • Esc رجوع"
                                    HorizontalAlignment="Left"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    FontSize="10"/>
@@ -679,8 +687,13 @@
                     <TextBox Text="{Binding CustomerNameInput, UpdateSourceTrigger=PropertyChanged}"
                              Height="43"/>
 
-                    <TextBlock Text="رقم الهاتف" FontWeight="SemiBold" Margin="0,14,0,6"/>
-                    <TextBox Text="{Binding CustomerPhoneInput}" Height="43"/>
+                    <TextBlock Text="رقم الهاتف العراقي" FontWeight="SemiBold" Margin="0,14,0,6"/>
+                    <TextBox Text="{Binding CustomerPhoneInput}" Height="43"
+                             ToolTip="مثال: 07701234567 — مفتاح العراق +964 يضاف تلقائياً عند واتساب"/>
+                    <TextBlock Text="مثال: 07701234567  •  العراق +964 تلقائياً للواتساب"
+                               FontSize="10"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Margin="0,5,0,0"/>
 
                     <TextBlock Text="العنوان" FontWeight="SemiBold" Margin="0,14,0,6"/>
                     <TextBox Text="{Binding CustomerAddressInput}" Height="43"/>
@@ -825,6 +838,174 @@
                                 Style="{StaticResource SecondaryButton}"/>
                     </Grid>
                 </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Account statement dialog -->
+        <Grid Grid.ColumnSpan="2"
+              Visibility="{Binding IsStatementOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Background="#79000000">
+            <Border Width="1020"
+                    MaxHeight="840"
+                    Background="White"
+                    CornerRadius="20"
+                    Padding="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="18"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid>
+                        <StackPanel>
+                            <TextBlock Text="كشف حساب الزبون"
+                                       FontSize="25"
+                                       FontWeight="Bold"/>
+                            <TextBlock Text="{Binding SelectedCustomerName}"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource PrimaryBrush}"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <Button Content="إغلاق  Esc"
+                                Command="{Binding CancelDialogCommand}"
+                                Style="{StaticResource GhostButton}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"/>
+                    </Grid>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.25*"/>
+                            <ColumnDefinition Width="18"/>
+                            <ColumnDefinition Width="0.85*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0"
+                                Background="#F3F5F4"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14"
+                                Padding="12">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <Image Source="{Binding StatementImagePath}"
+                                       Stretch="Uniform"
+                                       HorizontalAlignment="Center"/>
+                            </ScrollViewer>
+                        </Border>
+
+                        <StackPanel Grid.Column="2">
+                            <Border Background="#F2F8F5"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="13"
+                                    Padding="14">
+                                <StackPanel>
+                                    <TextBlock Text="ملخص الكشف"
+                                               FontWeight="Bold"
+                                               FontSize="16"/>
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="الهاتف:" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding SelectedCustomerPhone}"
+                                                   FontWeight="SemiBold"
+                                                   HorizontalAlignment="Left"/>
+                                    </Grid>
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="عدد الحركات:" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding StatementTransactionCountText}"
+                                                   FontWeight="SemiBold"
+                                                   HorizontalAlignment="Left"/>
+                                    </Grid>
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="تاريخ الكشف:" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding StatementGeneratedAtText}"
+                                                   FontWeight="SemiBold"
+                                                   HorizontalAlignment="Left"/>
+                                    </Grid>
+                                    <Separator Margin="0,12"/>
+                                    <TextBlock Text="الرصيد الحالي"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="{Binding SelectedCustomerDebtText}"
+                                               FontSize="27"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource DebtBrush}"
+                                               Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="النص الذي سيظهر جاهزاً في واتساب"
+                                       FontWeight="SemiBold"
+                                       Margin="0,16,0,6"/>
+                            <TextBox Text="{Binding StatementText}"
+                                     IsReadOnly="True"
+                                     Height="190"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"/>
+
+                            <Border Background="#ECF8F0"
+                                    CornerRadius="10"
+                                    Padding="10"
+                                    Margin="0,12,0,0">
+                                <TextBlock Text="زر واتساب يفتح محادثة هذا الرقم العراقي بالنص جاهزاً، وينسخ صورة الوصل. داخل المحادثة اضغط Ctrl+V لإرفاق الصورة ثم أرسل."
+                                           TextWrapping="Wrap"
+                                           FontSize="11"
+                                           Foreground="{StaticResource PrimaryDarkBrush}"/>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.3*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Content="فتح واتساب للزبون"
+                                Command="{Binding SendStatementWhatsAppCommand}"
+                                Style="{StaticResource PrimaryButton}"
+                                Padding="18,12"/>
+                        <Button Grid.Column="2"
+                                Content="نسخ النص"
+                                Command="{Binding CopyStatementTextCommand}"
+                                Style="{StaticResource SecondaryButton}"/>
+                        <Button Grid.Column="4"
+                                Content="فتح الصورة"
+                                Command="{Binding OpenStatementImageCommand}"
+                                Style="{StaticResource SecondaryButton}"/>
+                        <Button Grid.Column="6"
+                                Content="مجلد الكشوفات"
+                                Command="{Binding OpenStatementFolderCommand}"
+                                Style="{StaticResource GhostButton}"/>
+                    </Grid>
+                </Grid>
             </Border>
         </Grid>
 
