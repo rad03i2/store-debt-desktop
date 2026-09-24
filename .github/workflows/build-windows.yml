@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repository
@@ -28,13 +28,43 @@ jobs:
       - name: Build
         run: dotnet build StoreDebtDesktop.sln --configuration Release --no-restore
 
-      - name: Publish Windows x64
-        run: dotnet publish src/StoreDebt.Desktop/StoreDebt.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/StoreDebtDesktop
+      - name: Publish single-file Windows x64 EXE
+        run: >
+          dotnet publish src/StoreDebt.Desktop/StoreDebt.Desktop.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output artifacts/publish
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:PublishTrimmed=false
+          -p:PublishReadyToRun=false
+          -p:DebugType=embedded
 
-      - name: Upload desktop build
+      - name: Verify standalone EXE
+        shell: pwsh
+        run: |
+          $exe = "artifacts/publish/StoreDebt.Desktop.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Standalone EXE was not created."
+          }
+
+          $size = (Get-Item $exe).Length
+          if ($size -lt 10000000) {
+            throw "EXE is unexpectedly small and may not be self-contained."
+          }
+
+          New-Item -ItemType Directory -Force -Path "artifacts/release" | Out-Null
+          Copy-Item $exe "artifacts/release/StoreDebtDesktop.exe"
+
+          Write-Host "Standalone EXE size: $size bytes"
+          Get-ChildItem "artifacts/release"
+
+      - name: Upload standalone Windows EXE
         uses: actions/upload-artifact@v4
         with:
-          name: StoreDebtDesktop-win-x64
-          path: artifacts/StoreDebtDesktop/
+          name: StoreDebtDesktop-standalone-win-x64
+          path: artifacts/release/StoreDebtDesktop.exe
           if-no-files-found: error
           retention-days: 30
