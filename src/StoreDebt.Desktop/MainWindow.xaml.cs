@@ -14,10 +14,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        var statementService = new StatementService();
+
         _viewModel = new MainViewModel(
             new StoreDatabase(),
             new DialogService(),
-            new DebtSpeechService());
+            new DebtSpeechService(),
+            statementService,
+            new WhatsAppService(statementService));
 
         DataContext = _viewModel;
 
