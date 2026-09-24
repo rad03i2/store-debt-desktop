@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     {
         Loaded -= OnLoaded;
         await _viewModel.InitializeAsync();
+        _viewModel.PrepareSpeech();
         SearchBox.Focus();
     }
 
