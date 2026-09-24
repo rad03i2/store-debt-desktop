@@ -75,6 +75,11 @@
             <Setter Property="Foreground" Value="{StaticResource DebtBrush}"/>
         </Style>
 
+        <Style x:Key="DangerPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="Background" Value="{StaticResource DebtBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
         <Style x:Key="GhostButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
             <Setter Property="Background" Value="#F5F7F6"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
