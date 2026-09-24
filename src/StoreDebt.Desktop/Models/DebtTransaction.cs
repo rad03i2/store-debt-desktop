@@ -1,3 +1,5 @@
+using StoreDebt.Desktop.Services;
+
 namespace StoreDebt.Desktop.Models;
 
 public enum TransactionType
@@ -18,8 +20,10 @@ public sealed class DebtTransaction
     public long Timestamp { get; init; }
 
     public string TypeText => Type == TransactionType.Debt ? "دين جديد" : "تسديد";
-    public string AmountText => Type == TransactionType.Debt ? $"+{Amount:N0} د.ع" : $"-{Amount:N0} د.ع";
-    public string BalanceText => $"{BalanceAfter:N0} د.ع";
-    public string DateTimeText => DateTimeOffset.FromUnixTimeMilliseconds(Timestamp)
-        .LocalDateTime.ToString("yyyy/MM/dd - hh:mm tt");
+    public string AmountText => Type == TransactionType.Debt
+        ? $"+{EnglishDigits.Number(Amount)} د.ع"
+        : $"-{EnglishDigits.Number(Amount)} د.ع";
+    public string BalanceText => MoneyFormatter.Format(BalanceAfter);
+    public string DateTimeText => EnglishDigits.DateTime(
+        DateTimeOffset.FromUnixTimeMilliseconds(Timestamp).LocalDateTime);
 }
