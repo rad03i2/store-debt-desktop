@@ -1,55 +1,70 @@
-using System.Globalization;
 using System.Speech.Synthesis;
 
 namespace StoreDebt.Desktop.Services;
 
 public sealed class DebtSpeechService : IDisposable
 {
-    private readonly SpeechSynthesizer _synthesizer = new();
     private readonly object _sync = new();
+    private SpeechSynthesizer? _synthesizer;
+    private bool _initializationAttempted;
     private bool _disposed;
-
-    public DebtSpeechService()
-    {
-        try
-        {
-            var arabicVoice = _synthesizer.GetInstalledVoices()
-                .FirstOrDefault(v =>
-                    v.Enabled &&
-                    v.VoiceInfo.Culture.Name.StartsWith("ar", StringComparison.OrdinalIgnoreCase));
-
-            if (arabicVoice is not null)
-            {
-                _synthesizer.SelectVoice(arabicVoice.VoiceInfo.Name);
-            }
-
-            _synthesizer.Rate = 0;
-            _synthesizer.Volume = 100;
-        }
-        catch
-        {
-            // Speech is an enhancement; failure must never block store operations.
-        }
-    }
 
     public async Task SpeakDebtAsync(long amount)
     {
         await Task.Delay(500);
 
-        if (_disposed) return;
-
         try
         {
+            var synthesizer = EnsureSynthesizer();
+            if (synthesizer is null) return;
+
             lock (_sync)
             {
                 if (_disposed) return;
-                _synthesizer.SpeakAsyncCancelAll();
-                _synthesizer.SpeakAsync($"تم تسجيل دين بمبلغ {amount} دينار عراقي");
+                synthesizer.SpeakAsyncCancelAll();
+                synthesizer.SpeakAsync($"تم تسجيل دين بمبلغ {amount} دينار عراقي");
             }
         }
         catch
         {
-            // Debt has already been safely saved; TTS failure is non-critical.
+            // Speech must never prevent the store app from working.
+        }
+    }
+
+    private SpeechSynthesizer? EnsureSynthesizer()
+    {
+        lock (_sync)
+        {
+            if (_disposed) return null;
+            if (_synthesizer is not null) return _synthesizer;
+            if (_initializationAttempted) return null;
+
+            _initializationAttempted = true;
+
+            try
+            {
+                var synthesizer = new SpeechSynthesizer();
+
+                var arabicVoice = synthesizer.GetInstalledVoices()
+                    .FirstOrDefault(v =>
+                        v.Enabled &&
+                        v.VoiceInfo.Culture.Name.StartsWith(
+                            "ar",
+                            StringComparison.OrdinalIgnoreCase));
+
+                if (arabicVoice is not null)
+                    synthesizer.SelectVoice(arabicVoice.VoiceInfo.Name);
+
+                synthesizer.Rate = 0;
+                synthesizer.Volume = 100;
+                _synthesizer = synthesizer;
+
+                return _synthesizer;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 
@@ -59,8 +74,17 @@ public sealed class DebtSpeechService : IDisposable
         {
             if (_disposed) return;
             _disposed = true;
-            _synthesizer.SpeakAsyncCancelAll();
-            _synthesizer.Dispose();
+
+            try
+            {
+                _synthesizer?.SpeakAsyncCancelAll();
+                _synthesizer?.Dispose();
+            }
+            catch
+            {
+            }
+
+            _synthesizer = null;
         }
     }
 }
