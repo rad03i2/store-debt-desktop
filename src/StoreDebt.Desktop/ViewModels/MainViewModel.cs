@@ -116,11 +116,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ShowStatementCommand = _showStatementCommand;
         SendStatementWhatsAppCommand = _sendStatementWhatsAppCommand;
 
-        SaveDebtCommand = new AsyncRelayCommand(SaveDebtAsync, () => SelectedCustomer is not null);
-        SavePaymentCommand = new AsyncRelayCommand(SavePaymentAsync, () => SelectedCustomer is not null);
-        SaveTransactionEditCommand = new AsyncRelayCommand(
-            SaveTransactionEditAsync,
-            () => SelectedTransaction is not null);
+        SaveDebtCommand = new AsyncRelayCommand(SaveDebtAsync);
+        SavePaymentCommand = new AsyncRelayCommand(SavePaymentAsync);
+        SaveTransactionEditCommand = new AsyncRelayCommand(SaveTransactionEditAsync);
 
         CopyStatementTextCommand = new RelayCommand(_ => CopyStatementText());
         OpenStatementImageCommand = new RelayCommand(_ => OpenStatementImage());
