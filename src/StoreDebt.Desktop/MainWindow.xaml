@@ -9,7 +9,7 @@
         WindowStartupLocation="CenterScreen"
         WindowState="Maximized"
         FlowDirection="RightToLeft"
-        Language="en-US"
+        Language="ar-IQ"
         Background="{StaticResource BackgroundBrush}"
         PreviewKeyDown="OnPreviewKeyDown">
 
@@ -52,26 +52,34 @@
                                Foreground="#BEDCCE" FontSize="12"/>
                 </StackPanel>
 
-                <StackPanel Grid.Row="2">
-                    <Button Content="⌂  الرئيسية"
+                <StackPanel Grid.Row="2" FlowDirection="RightToLeft">
+                    <Button Content="⌂   الرئيسية"
                             Command="{Binding ShowDashboardCommand}"
                             Style="{StaticResource NavButton}"
+                            HorizontalContentAlignment="Right"
                             Margin="0,0,0,7"/>
-                    <Button Content="☷  سجل جميع الحركات"
+                    <Button Content="👥   الزبائن"
+                            Command="{Binding ShowDashboardCommand}"
+                            Style="{StaticResource NavButton}"
+                            HorizontalContentAlignment="Right"
+                            Margin="0,0,0,7"/>
+                    <Button Content="☷   سجل الحركات"
                             Command="{Binding ShowActivityCommand}"
                             Style="{StaticResource NavButton}"
+                            HorizontalContentAlignment="Right"
                             Margin="0,0,0,7"/>
-                    <Button Content="+  زبون جديد"
-                            Command="{Binding ShowAddCustomerCommand}"
-                            Style="{StaticResource NavButton}"/>
+                    <Button Content="⚙   الإعدادات"
+                            Command="{Binding ShowSettingsCommand}"
+                            Style="{StaticResource NavButton}"
+                            HorizontalContentAlignment="Right"/>
                 </StackPanel>
 
                 <Border Grid.Row="4" Background="#18FFFFFF"
                         CornerRadius="12" Padding="12">
                     <StackPanel>
-                        <TextBlock Text="المرحلة الثالثة" Foreground="White"
+                        <TextBlock Text="الإصدار الجديد" Foreground="White"
                                    FontWeight="Bold" FontSize="12"/>
-                        <TextBlock Text="الإصدار 0.3.5" Foreground="#BEDCCE"
+                        <TextBlock Text="الإصدار ٠.٣.٧" Foreground="#BEDCCE"
                                    FontSize="11" Margin="0,3,0,0"/>
                         <TextBlock Text="ويندوز • قاعدة بيانات محلية" Foreground="#9FC8B5"
                                    FontSize="10" Margin="0,3,0,0"/>
@@ -268,6 +276,14 @@
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Grid>
+                                            <Grid.ContextMenu>
+                                                <ContextMenu FlowDirection="RightToLeft">
+                                                    <MenuItem Header="تعديل بيانات الزبون"
+                                                              Click="EditCustomerMenu_Click"/>
+                                                    <MenuItem Header="كشف الحساب"
+                                                              Click="StatementMenu_Click"/>
+                                                </ContextMenu>
+                                            </Grid.ContextMenu>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="48"/>
                                                 <ColumnDefinition Width="*"/>
@@ -406,32 +422,10 @@
                                         Padding="20,13"/>
                             </Grid>
 
-                            <!-- Account management -->
-                            <Grid Grid.Row="4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="8"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <Button Grid.Column="0"
-                                        Content="تعديل بيانات الزبون"
-                                        Command="{Binding ShowEditCustomerCommand}"
-                                        Style="{StaticResource GhostButton}"/>
-                                <Button Grid.Column="2"
-                                        Content="حذف الزبون"
-                                        Command="{Binding DeleteCustomerCommand}"
-                                        Style="{StaticResource DangerButton}"
-                                        Padding="12,8"
-                                        FontSize="12"/>
-                                <TextBlock Grid.Column="3"
-                                           Text="الحذف متاح فقط عندما يكون الدين 0"
-                                           VerticalAlignment="Center"
-                                           HorizontalAlignment="Left"
-                                           FontSize="10"
-                                           Foreground="{StaticResource TextSecondaryBrush}"/>
-                            </Grid>
+                            <TextBlock Grid.Row="4"
+                                       Text="انقر بزر الماوس الأيمن على الزبون للتعديل أو فتح كشف الحساب"
+                                       FontSize="10"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
 
                             <!-- Transactions toolbar -->
                             <Grid Grid.Row="6">
@@ -670,6 +664,119 @@
                     </Grid>
                 </Border>
             </Grid>
+
+            <!-- SETTINGS -->
+            <ScrollViewer Visibility="{Binding IsSettingsView, Converter={StaticResource BoolToVisibilityConverter}}"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,0,0,18">
+                    <TextBlock Text="الإعدادات" FontSize="28" FontWeight="Bold"/>
+                    <TextBlock Text="إعدادات الصوت وإدارة الحذف الآمن"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Margin="0,5,0,20"/>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="24" Margin="0,0,0,18">
+                        <StackPanel>
+                            <TextBlock Text="الصوت" FontSize="20" FontWeight="Bold"/>
+                            <TextBlock Text="أفضل الأصوات العربية المثبتة في Windows"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,4,0,16"/>
+
+                            <ListBox ItemsSource="{Binding ArabicVoices}"
+                                     SelectedItem="{Binding SelectedSpeechVoice}"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     MaxHeight="320">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold"/>
+                                                <TextBlock Text="⭐ الصوت المحفوظ حاليًا"
+                                                           Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           Foreground="{StaticResource PrimaryBrush}"
+                                                           FontSize="11"
+                                                           Margin="0,3,0,0"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Content="🔊 تجربة الصوت"
+                                                    Command="{Binding DataContext.TestVoiceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Margin="14,0,0,0"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <Grid Margin="0,20,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock Text="سرعة الصوت" FontWeight="SemiBold" Margin="0,0,0,7"/>
+                                    <ComboBox ItemsSource="{Binding SpeechSpeedOptions}"
+                                              SelectedItem="{Binding SpeechSpeed}"
+                                              Height="42"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="مستوى الصوت" FontWeight="SemiBold" Margin="0,0,0,7"/>
+                                    <Slider Minimum="0" Maximum="100"
+                                            Value="{Binding SpeechVolume}"
+                                            TickFrequency="10"
+                                            IsSnapToTickEnabled="True"
+                                            Height="36"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,20,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Content="اختبار النطق قبل الاعتماد"
+                                        Command="{Binding TestVoiceCommand}"
+                                        CommandParameter="{Binding SelectedSpeechVoice}"
+                                        Style="{StaticResource SecondaryButton}"/>
+                                <Button Grid.Column="2"
+                                        Content="حفظ الصوت المختار"
+                                        Command="{Binding SaveVoiceSettingsCommand}"
+                                        Style="{StaticResource PrimaryButton}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="24">
+                        <StackPanel>
+                            <TextBlock Text="حذف الزبون" FontSize="20" FontWeight="Bold"/>
+                            <TextBlock Text="الحذف نهائي ومتاح فقط عندما يكون الرصيد الحالي صفرًا ولا توجد ديون مفتوحة."
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,4,0,14"/>
+                            <ComboBox ItemsSource="{Binding Customers}"
+                                      SelectedItem="{Binding SelectedCustomer}"
+                                      DisplayMemberPath="Name"
+                                      Height="44"/>
+                            <Button Content="حذف الزبون 🗑️"
+                                    Command="{Binding DeleteCustomerCommand}"
+                                    Style="{StaticResource DangerPrimaryButton}"
+                                    Margin="0,14,0,0"
+                                    HorizontalAlignment="Right"
+                                    Padding="24,11"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <!-- Customer dialog -->
@@ -681,7 +788,7 @@
                 <StackPanel>
                     <TextBlock Text="{Binding CustomerDialogTitle}"
                                FontSize="23" FontWeight="Bold"/>
-                    <TextBlock Text="الاسم مطلوب، وبقية البيانات يمكن تعديلها لاحقاً."
+                    <TextBlock Text="أدخل اسم الزبون ورقم الهاتف ثم احفظ."
                                Foreground="{StaticResource TextSecondaryBrush}"
                                Margin="0,4,0,18"/>
 
@@ -691,18 +798,11 @@
 
                     <TextBlock Text="رقم الهاتف العراقي" FontWeight="SemiBold" Margin="0,14,0,6"/>
                     <TextBox Text="{Binding CustomerPhoneInput}" Height="43" FlowDirection="LeftToRight" TextAlignment="Left"
-                             ToolTip="مثال: 07701234567 — مفتاح العراق +964 يضاف تلقائياً عند واتساب"/>
-                    <TextBlock Text="مثال: 07701234567  •  العراق +964 تلقائياً للواتساب"
+                             ToolTip="مثال: ٠٧٧٠١٢٣٤٥٦٧ — مفتاح العراق +٩٦٤ يضاف تلقائياً عند واتساب"/>
+                    <TextBlock Text="مثال: ٠٧٧٠١٢٣٤٥٦٧  •  العراق +٩٦٤ تلقائياً للواتساب"
                                FontSize="10"
                                Foreground="{StaticResource TextSecondaryBrush}"
                                Margin="0,5,0,0"/>
-
-                    <TextBlock Text="العنوان" FontWeight="SemiBold" Margin="0,14,0,6"/>
-                    <TextBox Text="{Binding CustomerAddressInput}" Height="43"/>
-
-                    <TextBlock Text="ملاحظات" FontWeight="SemiBold" Margin="0,14,0,6"/>
-                    <TextBox Text="{Binding CustomerNotesInput}"
-                             Height="76" AcceptsReturn="True" TextWrapping="Wrap"/>
 
                     <Grid Margin="0,22,0,0">
                         <Grid.ColumnDefinitions>
@@ -742,21 +842,21 @@
                              Height="50" FontSize="21" FontWeight="Bold"/>
 
                     <UniformGrid Columns="8" Margin="0,12,0,0" FlowDirection="RightToLeft">
-                        <Button Content="250" Command="{Binding SetDebtAmountCommand}" CommandParameter="250"
+                        <Button Content="٢٥٠" Command="{Binding SetDebtAmountCommand}" CommandParameter="250"
                                 Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
-                        <Button Content="500" Command="{Binding SetDebtAmountCommand}" CommandParameter="500"
+                        <Button Content="٥٠٠" Command="{Binding SetDebtAmountCommand}" CommandParameter="500"
                                 Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
-                        <Button Content="750" Command="{Binding SetDebtAmountCommand}" CommandParameter="750"
+                        <Button Content="٧٥٠" Command="{Binding SetDebtAmountCommand}" CommandParameter="750"
                                 Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
-                        <Button Content="1,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="1000"
+                        <Button Content="١٬٠٠٠" Command="{Binding SetDebtAmountCommand}" CommandParameter="1000"
                                 Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
-                        <Button Content="2,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="2000"
+                        <Button Content="٢٬٠٠٠" Command="{Binding SetDebtAmountCommand}" CommandParameter="2000"
                                 Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
-                        <Button Content="3,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="3000"
+                        <Button Content="٣٬٠٠٠" Command="{Binding SetDebtAmountCommand}" CommandParameter="3000"
                                 Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
-                        <Button Content="4,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="4000"
+                        <Button Content="٤٬٠٠٠" Command="{Binding SetDebtAmountCommand}" CommandParameter="4000"
                                 Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
-                        <Button Content="5,000" Command="{Binding SetDebtAmountCommand}" CommandParameter="5000"
+                        <Button Content="٥٬٠٠٠" Command="{Binding SetDebtAmountCommand}" CommandParameter="5000"
                                 Style="{StaticResource SecondaryButton}" Margin="3" FontSize="14" Padding="12,10"/>
                     </UniformGrid>
 
@@ -817,13 +917,13 @@
                              Height="50" FontSize="21" FontWeight="Bold"/>
 
                     <UniformGrid Columns="5" Margin="0,10,0,0">
-                        <Button Content="500" Command="{Binding SetPaymentAmountCommand}" CommandParameter="500"
+                        <Button Content="٥٠٠" Command="{Binding SetPaymentAmountCommand}" CommandParameter="500"
                                 Style="{StaticResource SecondaryButton}" Margin="2"/>
-                        <Button Content="1,000" Command="{Binding SetPaymentAmountCommand}" CommandParameter="1000"
+                        <Button Content="١٬٠٠٠" Command="{Binding SetPaymentAmountCommand}" CommandParameter="1000"
                                 Style="{StaticResource SecondaryButton}" Margin="2"/>
-                        <Button Content="2,000" Command="{Binding SetPaymentAmountCommand}" CommandParameter="2000"
+                        <Button Content="٢٬٠٠٠" Command="{Binding SetPaymentAmountCommand}" CommandParameter="2000"
                                 Style="{StaticResource SecondaryButton}" Margin="2"/>
-                        <Button Content="5,000" Command="{Binding SetPaymentAmountCommand}" CommandParameter="5000"
+                        <Button Content="٥٬٠٠٠" Command="{Binding SetPaymentAmountCommand}" CommandParameter="5000"
                                 Style="{StaticResource SecondaryButton}" Margin="2"/>
                         <Button Content="10,000" Command="{Binding SetPaymentAmountCommand}" CommandParameter="10000"
                                 Style="{StaticResource SecondaryButton}" Margin="2"/>
@@ -857,8 +957,8 @@
         <Grid Grid.ColumnSpan="2"
               Visibility="{Binding IsStatementOpen, Converter={StaticResource BoolToVisibilityConverter}}"
               Background="#79000000">
-            <Border Width="860"
-                    MaxHeight="850"
+            <Border Width="1000"
+                    MaxHeight="900"
                     Background="White"
                     CornerRadius="20"
                     Padding="24"
@@ -876,16 +976,23 @@
                     <Grid>
                         <StackPanel>
                             <TextBlock Text="كشف حساب"
-                                       FontSize="26"
+                                       FontSize="28"
                                        FontWeight="Bold"/>
+                            <TextBlock Text="دفتر المحل - إدارة الديون والحسابات"
+                                       FontSize="12"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,4,0,0"/>
                             <TextBlock Text="{Binding SelectedCustomerName}"
                                        FontSize="14"
                                        FontWeight="SemiBold"
                                        Foreground="{StaticResource PrimaryBrush}"
-                                       Margin="0,4,0,0"/>
+                                       Margin="0,5,0,0"/>
                         </StackPanel>
-                        <Button Content="إغلاق"
+                        <Button Content="✕"
                                 Command="{Binding CancelDialogCommand}"
+                                Width="38" Height="38"
+                                FontSize="16"
+                                FontWeight="Bold"
                                 Style="{StaticResource GhostButton}"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Top"/>
@@ -901,7 +1008,7 @@
                                       HorizontalScrollBarVisibility="Disabled">
                             <Image Source="{Binding StatementImagePath}"
                                    Stretch="Uniform"
-                                   MaxWidth="760"
+                                   MaxWidth="900"
                                    HorizontalAlignment="Center"/>
                         </ScrollViewer>
                     </Border>
