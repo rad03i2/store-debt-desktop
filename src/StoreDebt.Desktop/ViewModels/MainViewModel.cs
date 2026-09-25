@@ -30,6 +30,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _statusMessage = "جاهز";
     private bool _isBusy;
     private bool _isActivityView;
+    private bool _isSettingsView;
 
     private bool _isCustomerDialogOpen;
     private bool _isEditingCustomer;
@@ -57,7 +58,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _statementText = string.Empty;
     private string _statementImagePath = string.Empty;
     private string _statementGeneratedAtText = string.Empty;
-    private string _statementTransactionCountText = "0";
+    private string _statementTransactionCountText = "٠";
+
+    private SpeechVoiceOption? _selectedSpeechVoice;
+    private string _speechSpeed = "طبيعي";
+    private int _speechVolume = 100;
 
     private long _totalDebt;
     private long _todayCollections;
@@ -127,6 +132,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         ShowActivityCommand = new AsyncRelayCommand(ShowActivityAsync);
         ShowDashboardCommand = new RelayCommand(_ => ShowDashboard());
+        ShowSettingsCommand = new RelayCommand(_ => ShowSettings());
+        TestVoiceCommand = new RelayCommand(TestVoice);
+        SaveVoiceSettingsCommand = new RelayCommand(_ => SaveVoiceSettings());
 
         SetDebtAmountCommand = new RelayCommand(SetDebtAmount);
         SetPaymentAmountCommand = new RelayCommand(SetPaymentAmount);
@@ -135,6 +143,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<Customer> Customers { get; } = [];
     public ObservableCollection<DebtTransaction> Transactions { get; } = [];
     public ObservableCollection<ActivityRecord> Activity { get; } = [];
+    public ObservableCollection<SpeechVoiceOption> ArabicVoices { get; } = [];
+    public IReadOnlyList<string> SpeechSpeedOptions { get; } = ["بطيء", "طبيعي", "سريع"];
 
     public ICommand ShowAddCustomerCommand { get; }
     public ICommand SaveCustomerCommand { get; }
@@ -152,6 +162,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ICommand RefreshCommand { get; }
     public ICommand ShowActivityCommand { get; }
     public ICommand ShowDashboardCommand { get; }
+    public ICommand ShowSettingsCommand { get; }
+    public ICommand TestVoiceCommand { get; }
+    public ICommand SaveVoiceSettingsCommand { get; }
     public ICommand SetDebtAmountCommand { get; }
     public ICommand SetPaymentAmountCommand { get; }
     public ICommand ShowStatementCommand { get; }
@@ -251,7 +264,37 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool IsDashboardView => !IsActivityView;
+    public bool IsSettingsView
+    {
+        get => _isSettingsView;
+        private set
+        {
+            if (!SetProperty(ref _isSettingsView, value)) return;
+            OnPropertyChanged(nameof(IsDashboardView));
+        }
+    }
+
+    public bool IsDashboardView => !IsActivityView && !IsSettingsView;
+
+    public SpeechVoiceOption? SelectedSpeechVoice
+    {
+        get => _selectedSpeechVoice;
+        set => SetProperty(ref _selectedSpeechVoice, value);
+    }
+
+    public string SpeechSpeed
+    {
+        get => _speechSpeed;
+        set => SetProperty(ref _speechSpeed, value);
+    }
+
+    public int SpeechVolume
+    {
+        get => _speechVolume;
+        set => SetProperty(ref _speechVolume, Math.Clamp(value, 0, 100));
+    }
+
+    public string SpeechVolumeText => $"{EnglishDigits.Number(SpeechVolume)}٪";
 
     public bool IsCustomerDialogOpen
     {
@@ -306,7 +349,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string CustomerPhoneInput
     {
         get => _customerPhoneInput;
-        set => SetProperty(ref _customerPhoneInput, EnglishDigits.Normalize(value));
+        set => SetProperty(ref _customerPhoneInput, EnglishDigits.ToArabicDigits(EnglishDigits.Normalize(value)));
     }
 
     public string CustomerAddressInput
@@ -324,7 +367,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string DebtAmountInput
     {
         get => _debtAmountInput;
-        set => SetProperty(ref _debtAmountInput, EnglishDigits.Normalize(value));
+        set => SetProperty(ref _debtAmountInput, EnglishDigits.ToArabicDigits(EnglishDigits.Normalize(value)));
     }
 
     public string DebtItemsInput
@@ -342,7 +385,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string PaymentAmountInput
     {
         get => _paymentAmountInput;
-        set => SetProperty(ref _paymentAmountInput, EnglishDigits.Normalize(value));
+        set => SetProperty(ref _paymentAmountInput, EnglishDigits.ToArabicDigits(EnglishDigits.Normalize(value)));
     }
 
     public string PaymentNoteInput
@@ -354,7 +397,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string EditTransactionAmountInput
     {
         get => _editTransactionAmountInput;
-        set => SetProperty(ref _editTransactionAmountInput, EnglishDigits.Normalize(value));
+        set => SetProperty(ref _editTransactionAmountInput, EnglishDigits.ToArabicDigits(EnglishDigits.Normalize(value)));
     }
 
     public string EditTransactionItemsInput
@@ -428,7 +471,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string TotalDebtText => MoneyFormatter.Format(TotalDebt);
     public string TodayCollectionsText => MoneyFormatter.Format(TodayCollections);
     public string CustomerCountText => EnglishDigits.Number(CustomerCount);
-    public string TodayText => EnglishDigits.Normalize(
+    public string TodayText => EnglishDigits.ToArabicDigits(
         DateTime.Now.ToString("dddd، yyyy/MM/dd", ArabicCulture));
 
     public async Task InitializeAsync()
@@ -540,6 +583,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task ShowActivityAsync()
     {
         CloseDialogs();
+        IsSettingsView = false;
         IsActivityView = true;
         await LoadActivityAsync();
         StatusMessage = $"عرض آخر {EnglishDigits.Number(Activity.Count)} حركة.";
@@ -549,7 +593,57 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         CloseDialogs();
         IsActivityView = false;
+        IsSettingsView = false;
         StatusMessage = "العودة إلى إدارة حسابات الزبائن.";
+    }
+
+    private void ShowSettings()
+    {
+        CloseDialogs();
+        IsActivityView = false;
+        IsSettingsView = true;
+
+        ArabicVoices.Clear();
+        foreach (var voice in _speech.GetTopArabicVoices())
+            ArabicVoices.Add(voice);
+
+        SelectedSpeechVoice = ArabicVoices.FirstOrDefault(v => v.IsSelected)
+            ?? ArabicVoices.FirstOrDefault();
+        SpeechSpeed = _speech.Speed;
+        SpeechVolume = _speech.Volume;
+        OnPropertyChanged(nameof(SpeechVolumeText));
+
+        StatusMessage = ArabicVoices.Count == 0
+            ? "لم يتم العثور على صوت عربي مثبت في Windows."
+            : $"تم العثور على {EnglishDigits.Number(ArabicVoices.Count)} أصوات عربية مناسبة.";
+    }
+
+    private void TestVoice(object? parameter)
+    {
+        var voice = parameter as SpeechVoiceOption ?? SelectedSpeechVoice;
+        if (voice is null)
+        {
+            StatusMessage = "لا يوجد صوت عربي متاح للتجربة.";
+            return;
+        }
+
+        SelectedSpeechVoice = voice;
+        _ = _speech.TestVoiceAsync(voice.Name, SpeechSpeed, SpeechVolume);
+        StatusMessage = $"جاري تجربة الصوت: {voice.DisplayName}";
+    }
+
+    private void SaveVoiceSettings()
+    {
+        var voice = SelectedSpeechVoice;
+        if (voice is null)
+        {
+            StatusMessage = "اختر صوتاً عربياً أولاً.";
+            return;
+        }
+
+        _speech.SaveConfiguration(voice.Name, SpeechSpeed, SpeechVolume);
+        ShowSettings();
+        StatusMessage = "تم حفظ إعدادات الصوت وستبقى بعد إغلاق البرنامج.";
     }
 
     private void OpenAddCustomer()
@@ -727,7 +821,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (IsActivityView)
+        if (IsActivityView || IsSettingsView)
         {
             ShowDashboard();
             return;
@@ -767,8 +861,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     customer.Id,
                     name,
                     normalizedPhone,
-                    CustomerAddressInput,
-                    CustomerNotesInput);
+                    customer.Address,
+                    customer.Notes);
 
                 CloseDialogs();
                 await RefreshAsync();
@@ -779,8 +873,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 var id = await _database.AddCustomerAsync(
                     name,
                     normalizedPhone,
-                    CustomerAddressInput,
-                    CustomerNotesInput);
+                    string.Empty,
+                    string.Empty);
 
                 CloseDialogs();
                 await RefreshAsync();
@@ -806,13 +900,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (customer.TotalDebt != 0)
         {
             _dialogs.Info(
-                $"لا يمكن حذف {customer.Name} لأن عليه ديناً قدره {MoneyFormatter.Format(customer.TotalDebt)}.\nصفّر الحساب أولاً.",
+                $"لا يمكن حذف هذا الزبون لأن عليه دين بقيمة {MoneyFormatter.Format(customer.TotalDebt)}",
                 "حماية حساب الزبون");
             return;
         }
 
         if (!_dialogs.Confirm(
-                $"سيتم حذف الزبون «{customer.Name}» وجميع حركاته القديمة نهائياً.\n\nهل تريد المتابعة؟",
+                "هل أنت متأكد من حذف الزبون؟ سيتم حذف سجل بياناته نهائيًا.",
                 "حذف الزبون"))
             return;
 
@@ -990,7 +1084,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             var total = checked(current + increment);
-            DebtAmountInput = total.ToString(CultureInfo.InvariantCulture);
+            DebtAmountInput = EnglishDigits.ToArabicDigits(total.ToString(CultureInfo.InvariantCulture));
         }
         catch (OverflowException)
         {
@@ -1001,7 +1095,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void SetPaymentAmount(object? parameter)
     {
         if (parameter is null) return;
-        PaymentAmountInput = EnglishDigits.Normalize(parameter.ToString());
+        PaymentAmountInput = EnglishDigits.ToArabicDigits(EnglishDigits.Normalize(parameter.ToString()));
     }
 
     private void RaiseCustomerCommandStates()
