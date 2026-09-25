@@ -98,7 +98,8 @@ public partial class MainWindow : Window
     {
         if (sender is not MenuItem menuItem ||
             menuItem.Parent is not ContextMenu contextMenu ||
-            contextMenu.PlacementTarget?.DataContext is not Customer customer)
+            contextMenu.PlacementTarget is not FrameworkElement placementTarget ||
+            placementTarget.DataContext is not Customer customer)
         {
             return false;
         }
