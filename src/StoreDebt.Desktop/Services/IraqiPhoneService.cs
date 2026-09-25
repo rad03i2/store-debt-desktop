@@ -48,8 +48,10 @@ public static class IraqiPhoneService
         if (string.IsNullOrWhiteSpace(input))
             return "بدون رقم هاتف";
 
-        return TryNormalizeForStorage(input, out var local) && !string.IsNullOrEmpty(local)
+        var display = TryNormalizeForStorage(input, out var local) && !string.IsNullOrEmpty(local)
             ? local
             : EnglishDigits.Normalize(input);
+
+        return EnglishDigits.ToArabicDigits(display);
     }
 }
