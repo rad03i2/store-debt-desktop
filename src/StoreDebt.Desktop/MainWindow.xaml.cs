@@ -1,6 +1,8 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using StoreDebt.Desktop.Data;
+using StoreDebt.Desktop.Models;
 using StoreDebt.Desktop.Services;
 using StoreDebt.Desktop.ViewModels;
 
@@ -27,14 +29,32 @@ public partial class MainWindow : Window
 
         Loaded += OnLoaded;
         Closed += OnClosed;
+        SystemParameters.StaticPropertyChanged += OnSystemParametersChanged;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
+        ApplySafeMaximizedBounds();
+
         await _viewModel.InitializeAsync();
         _viewModel.PrepareSpeech();
         SearchBox.Focus();
+    }
+
+    private void ApplySafeMaximizedBounds()
+    {
+        var workArea = SystemParameters.WorkArea;
+
+        MaxWidth = Math.Max(MinWidth, workArea.Width);
+        MaxHeight = Math.Max(MinHeight, workArea.Height - 8);
+        WindowState = WindowState.Maximized;
+    }
+
+    private void OnSystemParametersChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(SystemParameters.WorkArea))
+            ApplySafeMaximizedBounds();
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
@@ -46,7 +66,7 @@ public partial class MainWindow : Window
                 ActivitySearchBox.Focus();
                 ActivitySearchBox.SelectAll();
             }
-            else
+            else if (!_viewModel.IsSettingsView)
             {
                 SearchBox.Focus();
                 SearchBox.SelectAll();
@@ -56,8 +76,40 @@ public partial class MainWindow : Window
         }
     }
 
+    private void EditCustomerMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (TrySelectContextCustomer(sender) &&
+            _viewModel.ShowEditCustomerCommand.CanExecute(null))
+        {
+            _viewModel.ShowEditCustomerCommand.Execute(null);
+        }
+    }
+
+    private void StatementMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (TrySelectContextCustomer(sender) &&
+            _viewModel.ShowStatementCommand.CanExecute(null))
+        {
+            _viewModel.ShowStatementCommand.Execute(null);
+        }
+    }
+
+    private bool TrySelectContextCustomer(object sender)
+    {
+        if (sender is not MenuItem menuItem ||
+            menuItem.Parent is not ContextMenu contextMenu ||
+            contextMenu.PlacementTarget?.DataContext is not Customer customer)
+        {
+            return false;
+        }
+
+        _viewModel.SelectedCustomer = customer;
+        return true;
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
+        SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
         _viewModel.Dispose();
     }
 }
