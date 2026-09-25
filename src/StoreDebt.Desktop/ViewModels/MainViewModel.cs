@@ -291,7 +291,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public int SpeechVolume
     {
         get => _speechVolume;
-        set => SetProperty(ref _speechVolume, Math.Clamp(value, 0, 100));
+        set
+        {
+            if (SetProperty(ref _speechVolume, Math.Clamp(value, 0, 100)))
+                OnPropertyChanged(nameof(SpeechVolumeText));
+        }
     }
 
     public string SpeechVolumeText => $"{EnglishDigits.Number(SpeechVolume)}٪";
